@@ -1,0 +1,24 @@
+{
+  "name": "orizon-cottage",
+  "version": "1.0.0",
+  "description": "En este repositorio se encuentra todo del proyecto Orizon Cottage como trabajo de grado",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ABVivas/Orizon-Cottage.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/ABVivas/Orizon-Cottage/issues"
+  },
+  "homepage": "https://github.com/ABVivas/Orizon-Cottage#readme",
+  "dependencies": {
+    "react-router-dom": "^7.12.0"
+  }
+}
