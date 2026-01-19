@@ -1,5 +1,3 @@
-// src/Pages/Students.jsx
-
 import { useEffect, useState } from "react";
 import { getStudents, createStudent } from "../Services/student.service";
 
@@ -10,16 +8,12 @@ const Students = () => {
     nombre: "",
     apellido: "",
     grado: "",
-    acudienteId: ""
+    acudienteId: "",
   });
   const [error, setError] = useState("");
 
-  // Cargar estudiantes al iniciar
-  useEffect(() => {
-    fetchStudents();
-  }, []);
-
-  const fetchStudents = async () => {
+  // Cargar estudiantes
+  const loadStudents = async () => {
     try {
       const data = await getStudents();
       setStudents(data);
@@ -28,13 +22,16 @@ const Students = () => {
     }
   };
 
+  useEffect(() => {
+    loadStudents();
+  }, []);
+
+  // Manejar inputs
   const handleChange = (e) => {
-    setFormData({
-      ...formData,
-      [e.target.name]: e.target.value
-    });
+    setFormData({ ...formData, [e.target.name]: e.target.value });
   };
 
+  // Enviar formulario
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError("");
@@ -46,38 +43,55 @@ const Students = () => {
         nombre: "",
         apellido: "",
         grado: "",
-        acudienteId: ""
+        acudienteId: "",
       });
-      fetchStudents();
+      loadStudents();
     } catch (err) {
-      setError(err.response?.data?.error || "Error al registrar estudiante");
+      setError("No se pudo registrar el estudiante");
     }
   };
 
   return (
-    <div>
+    <div style={{ padding: "20px" }}>
       <h1>Gestión de Estudiantes</h1>
-
-      <form onSubmit={handleSubmit}>
-        <input name="studentId" placeholder="ID Estudiante" value={formData.studentId} onChange={handleChange} />
-        <input name="nombre" placeholder="Nombre" value={formData.nombre} onChange={handleChange} />
-        <input name="apellido" placeholder="Apellido" value={formData.apellido} onChange={handleChange} />
-        <input name="grado" placeholder="Grado" value={formData.grado} onChange={handleChange} />
-        <input name="acudienteId" placeholder="ID Acudiente" value={formData.acudienteId} onChange={handleChange} />
-
-        <button type="submit">Registrar</button>
-      </form>
 
       {error && <p style={{ color: "red" }}>{error}</p>}
 
+      <form onSubmit={handleSubmit}>
+        <input name="studentId" placeholder="ID" value={formData.studentId} onChange={handleChange} />
+        <input name="nombre" placeholder="Nombre" value={formData.nombre} onChange={handleChange} />
+        <input name="apellido" placeholder="Apellido" value={formData.apellido} onChange={handleChange} />
+        <input name="grado" placeholder="Grado" value={formData.grado} onChange={handleChange} />
+        <input name="acudienteId" placeholder="Acudiente ID" value={formData.acudienteId} onChange={handleChange} />
+        <button type="submit">Registrar</button>
+      </form>
+
+      <hr />
+
       <h2>Listado de Estudiantes</h2>
-      <ul>
-        {students.map((student) => (
-          <li key={student._id}>
-            {student.nombre} {student.apellido} - {student.grado}
-          </li>
-        ))}
-      </ul>
+
+      <table border="1" cellPadding="5">
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Nombre</th>
+            <th>Apellido</th>
+            <th>Grado</th>
+            <th>Acudiente</th>
+          </tr>
+        </thead>
+        <tbody>
+          {students.map((s) => (
+            <tr key={s._id}>
+              <td>{s.studentId}</td>
+              <td>{s.nombre}</td>
+              <td>{s.apellido}</td>
+              <td>{s.grado}</td>
+              <td>{s.acudienteId}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 };
