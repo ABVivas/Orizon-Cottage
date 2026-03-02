@@ -1,4 +1,4 @@
-// backend/src/Logic/student.controller.js
+// Backend/src/Logic/student.controller.js
 import Student from '../Data/student.model.js';
 
 // Obtener todos los estudiantes
