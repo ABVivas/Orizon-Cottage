@@ -1,19 +1,16 @@
-import express from "express";
+// Backend/src/Routes/attendance.routes.js
+import express from 'express';
 import {
-  markAttendance,
-  getAttendanceByStudent,
-  getAttendanceByDate
-} from "../Logic/attendance.controller.js";
+    registerAttendance,
+    getAttendanceByDate,
+    getAttendanceSummary
+} from '../Logic/attendance.controller.js';
+import { verifyToken } from '../Middleware/auth.middleware.js';
 
 const router = express.Router();
 
-// Registrar asistencia
-router.post("/", markAttendance);
-
-// Consultar asistencia por estudiante
-router.get("/student/:studentId", getAttendanceByStudent);
-
-// Consultar asistencia por fecha
-router.get("/fecha/:fecha", getAttendanceByDate);
+router.post('/', verifyToken, registerAttendance);
+router.get('/', verifyToken, getAttendanceByDate);
+router.get('/summary', verifyToken, getAttendanceSummary);
 
 export default router;

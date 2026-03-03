@@ -1,6 +1,15 @@
 // Frontend/src/Pages/AdminDashboard.jsx
 import { useState, useEffect } from 'react';
 import UserManagement from './UserManagement';
+import StudentManagement from './StudentManagement';
+import TeacherManagement from './TeacherManagement';
+import AttendanceControl from './AttendanceControl';
+import DisciplineReports from './DisciplineReports';
+import InstitutionalMessaging from './InstitutionalMessaging';
+import AdminProfile from './AdminProfile';
+import SystemSettings from './SystemSettings';
+import SeguimientoGeneral from './SeguimientoGeneral';
+
 
 const AdminDashboard = ({ user, onLogout }) => {
     const [activeSection, setActiveSection] = useState('overview');
@@ -9,7 +18,8 @@ const AdminDashboard = ({ user, onLogout }) => {
         totalTeachers: 14,
         totalParents: 154,
         todayAttendance: 85,
-        pendingObservations: 12
+        pendingObservations: 12,
+        unreadMessages: 0
     });
 
     useEffect(() => {
@@ -39,17 +49,23 @@ const AdminDashboard = ({ user, onLogout }) => {
             case 'users':
                 return <UserManagement />;
             case 'students':
-                return <div>Gestión de Estudiantes (próximamente)</div>;
+                return <StudentManagement />;
             case 'teachers':
-                return <div>Gestión de Docentes (próximamente)</div>;
+                return <TeacherManagement />;
             case 'attendance':
-                return <div>Control de Asistencia (próximamente)</div>;
+                return <AttendanceControl />;
             case 'reports':
-                return <div>Reportes de Convivencia (próximamente)</div>;
+                return <DisciplineReports />;
+            case 'profile':
+                return <AdminProfile user={user} />;
+            case 'settings':
+                return <SystemSettings />;
             case 'messages':
-                return <div>Mensajería (próximamente)</div>;
+                return <InstitutionalMessaging user={user} />;
+            case 'seguimiento':
+                return <SeguimientoGeneral />;
             default:
-                return <Overview stats={stats} />;
+                return <Overview stats={stats} onRefresh={fetchStats} />;
         }
     };
 
@@ -64,50 +80,62 @@ const AdminDashboard = ({ user, onLogout }) => {
                 </div>
 
                 <nav style={styles.sidebarNav}>
-                    <button 
-                        style={{...styles.navItem, ...(activeSection === 'overview' && styles.navItemActive)}}
-                        onClick={() => setActiveSection('overview')}
-                    >
-                        📊 Panel Principal
-                    </button>
-                    <button 
-                        style={{...styles.navItem, ...(activeSection === 'users' && styles.navItemActive)}}
-                        onClick={() => setActiveSection('users')}
-                    >
-                        👥 Gestión de Usuarios
-                    </button>
-                    <button 
-                        style={{...styles.navItem, ...(activeSection === 'students' && styles.navItemActive)}}
-                        onClick={() => setActiveSection('students')}
-                    >
-                        🧑‍🎓 Gestión de Estudiantes
-                    </button>
-                    <button 
-                        style={{...styles.navItem, ...(activeSection === 'teachers' && styles.navItemActive)}}
-                        onClick={() => setActiveSection('teachers')}
-                    >
-                        👨‍🏫 Gestión de Docentes
-                    </button>
-                    <button 
-                        style={{...styles.navItem, ...(activeSection === 'attendance' && styles.navItemActive)}}
-                        onClick={() => setActiveSection('attendance')}
-                    >
-                        📋 Control de Asistencia
-                    </button>
-                    <button 
-                        style={{...styles.navItem, ...(activeSection === 'reports' && styles.navItemActive)}}
-                        onClick={() => setActiveSection('reports')}
-                    >
-                        📈 Reportes
-                    </button>
-                    <button 
-                        style={{...styles.navItem, ...(activeSection === 'messages' && styles.navItemActive)}}
-                        onClick={() => setActiveSection('messages')}
-                    >
-                        💬 Mensajería
-                    </button>
-                </nav>
+                    <div style={styles.navSection}>
+                        <div style={styles.navSectionTitle}>📊 PANEL PRINCIPAL</div>
+                        <button 
+                            style={{...styles.navItem, ...(activeSection === 'seguimiento' && styles.navItemActive)}}
+                            onClick={() => setActiveSection('seguimiento')}
+                        >
+                            📈 Seguimiento General
+                        </button>
+                        <button 
+                            style={{...styles.navItem, ...(activeSection === 'attendance' && styles.navItemActive)}}
+                            onClick={() => setActiveSection('attendance')}
+                        >
+                            📋 Control de Asistencia
+                        </button>
+                        <button 
+                            style={{...styles.navItem, ...(activeSection === 'reports' && styles.navItemActive)}}
+                            onClick={() => setActiveSection('reports')}
+                        >
+                            📊 Reportes
+                        </button>
+                        <button 
+                            style={{...styles.navItem, ...(activeSection === 'messages' && styles.navItemActive)}}
+                            onClick={() => setActiveSection('messages')}
+                        >
+                            💬 Mensajería
+                        </button>
+                    </div>
 
+                    {/* GESTIÓN DE USUARIOS */}
+                    <div style={styles.navSection}>
+                        <div style={styles.navSectionTitle}>👥 GESTIÓN DE USUARIOS</div>
+                        <button 
+                            style={{...styles.navItem, ...(activeSection === 'users' && styles.navItemActive)}}
+                            onClick={() => setActiveSection('users')}
+                        >
+                            👥 Todos los Usuarios
+                        </button>
+                    </div>
+
+                    {/* CONFIGURACIÓN */}
+                    <div style={styles.navSection}>
+                        <div style={styles.navSectionTitle}>⚙️ CONFIGURACIÓN</div>
+                        <button 
+                            style={{...styles.navItem, ...(activeSection === 'profile' && styles.navItemActive)}}
+                            onClick={() => setActiveSection('profile')}
+                        >
+                            👤 Mi Perfil
+                        </button>
+                        <button 
+                            style={{...styles.navItem, ...(activeSection === 'settings' && styles.navItemActive)}}
+                            onClick={() => setActiveSection('settings')}
+                        >
+                            ⚙️ Configuración del Sistema
+                        </button>
+                    </div>
+                </nav>
                 <div style={styles.sidebarFooter}>
                     <button style={styles.logoutButton} onClick={onLogout}>
                         🔓 Cerrar Sesión
@@ -124,9 +152,14 @@ const AdminDashboard = ({ user, onLogout }) => {
 };
 
 // Componente Overview (Resumen)
-const Overview = ({ stats }) => (
+const Overview = ({ stats, onRefresh }) => (
     <div>
-        <h2 style={styles.pageTitle}>Panel de Control</h2>
+        <div style={styles.header}>
+            <h2 style={styles.pageTitle}>Panel de Control</h2>
+            <button onClick={onRefresh} style={styles.refreshButton}>
+                🔄 Actualizar
+            </button>
+        </div>
         
         <div style={styles.statsGrid}>
             <div style={styles.statCard}>
@@ -160,11 +193,29 @@ const Overview = ({ stats }) => (
                     <p style={styles.statLabel}>Asistencia Hoy</p>
                 </div>
             </div>
+            
+            <div style={styles.statCard}>
+                <div style={styles.statIcon}>⚠️</div>
+                <div>
+                    <h3 style={styles.statNumber}>{stats.pendingObservations}</h3>
+                    <p style={styles.statLabel}>Observaciones Pendientes</p>
+                </div>
+            </div>
+            
+            <div style={styles.statCard}>
+                <div style={styles.statIcon}>💬</div>
+                <div>
+                    <h3 style={styles.statNumber}>{stats.unreadMessages}</h3>
+                    <p style={styles.statLabel}>Mensajes No Leídos</p>
+                </div>
+            </div>
         </div>
 
         <div style={styles.recentActivity}>
             <h3>Actividad Reciente</h3>
-            <p style={styles.placeholder}>No hay actividad reciente</p>
+            <div style={styles.activityList}>
+                <p style={styles.placeholder}>Cargando actividades...</p>
+            </div>
         </div>
     </div>
 );
@@ -184,7 +235,8 @@ const styles = {
         position: 'fixed',
         top: 0,
         left: 0,
-        bottom: 0
+        bottom: 0,
+        overflowY: 'auto'
     },
     sidebarHeader: {
         padding: '30px 20px',
@@ -229,6 +281,17 @@ const styles = {
         borderLeftColor: '#27ae60',
         color: '#27ae60'
     },
+    navSection: {
+        marginBottom: '20px'
+    },
+    navSectionTitle: {
+        padding: '10px 20px',
+        fontSize: '11px',
+        fontWeight: 'bold',
+        color: '#7f8c8d',
+        textTransform: 'uppercase',
+        letterSpacing: '1px'
+    },
     sidebarFooter: {
         padding: '20px',
         borderTop: '1px solid #34495e'
@@ -241,17 +304,34 @@ const styles = {
         border: 'none',
         borderRadius: '5px',
         cursor: 'pointer',
-        fontSize: '14px'
+        fontSize: '14px',
+        transition: 'background-color 0.3s'
     },
     mainContent: {
         flex: 1,
         marginLeft: '280px',
-        padding: '30px'
+        padding: '30px',
+        backgroundColor: '#f5f5f5'
+    },
+    header: {
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: '30px'
     },
     pageTitle: {
+        margin: 0,
         color: '#2c3e50',
-        marginBottom: '30px',
         fontSize: '24px'
+    },
+    refreshButton: {
+        padding: '8px 15px',
+        backgroundColor: '#27ae60',
+        color: 'white',
+        border: 'none',
+        borderRadius: '5px',
+        cursor: 'pointer',
+        fontSize: '14px'
     },
     statsGrid: {
         display: 'grid',
@@ -266,7 +346,9 @@ const styles = {
         boxShadow: '0 2px 10px rgba(0,0,0,0.1)',
         display: 'flex',
         alignItems: 'center',
-        gap: '15px'
+        gap: '15px',
+        transition: 'transform 0.3s',
+        cursor: 'pointer'
     },
     statIcon: {
         fontSize: '40px'
