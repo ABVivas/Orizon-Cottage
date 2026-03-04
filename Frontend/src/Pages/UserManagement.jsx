@@ -1,7 +1,7 @@
 // Frontend/src/Pages/UserManagement.jsx
 import { useState, useEffect } from 'react';
 import UserList from './UserList';
-import StudentList from './studentList';
+import StudentList from "./StudentList";  // ✅ mayúsculas (como el archivo)
 
 const UserManagement = () => {
     const [users, setUsers] = useState([]);
