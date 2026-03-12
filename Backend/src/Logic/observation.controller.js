@@ -1,61 +1,110 @@
+// Backend/src/Logic/observation.controller.js
 import Observation from "../Data/observation.model.js";
+import mongoose from 'mongoose';
 
-// Crear una observación
+// ===========================================
+// FUNCIÓN PARA CREAR OBSERVACIONES (FALTANTE)
+// ===========================================
 export const createObservation = async (req, res) => {
-  try {
-    const { studentId, docenteId, tipo, descripcion, nivel } = req.body;
+    try {
+        const { studentId, docenteId, tipo, descripcion, nivel } = req.body;
 
-    if (!studentId || !docenteId || !tipo || !descripcion || !nivel) {
-      return res.status(400).json({ error: "Todos los campos son obligatorios" });
+        console.log('📝 Creando observación:', { studentId, docenteId, tipo, nivel });
+
+        // Validar campos requeridos
+        if (!studentId || !docenteId || !tipo || !descripcion || !nivel) {
+            return res.status(400).json({ 
+                success: false,
+                message: "Todos los campos son obligatorios" 
+            });
+        }
+
+        const newObservation = new Observation({
+            studentId,
+            docenteId,
+            tipo,
+            descripcion,
+            nivel
+        });
+
+        await newObservation.save();
+
+        res.status(201).json({
+            success: true,
+            message: "Observación registrada exitosamente",
+            data: newObservation
+        });
+
+    } catch (error) {
+        console.error('❌ Error al crear observación:', error);
+        res.status(500).json({ 
+            success: false,
+            message: "Error al guardar la observación",
+            error: error.message 
+        });
     }
-
-    const newObs = new Observation({
-      studentId,
-      docenteId,
-      tipo,
-      descripcion,
-      nivel
-    });
-
-    await newObs.save();
-
-    res.status(201).json({
-      message: "Observación registrada exitosamente",
-      data: newObs
-    });
-
-  } catch (error) {
-    res.status(500).json({ error: "Error al guardar la observación" });
-  }
 };
 
+// ===========================================
+// TUS FUNCIONES EXISTENTES
+// ===========================================
 
-// Observaciones por estudiante
+// Obtener observaciones por docente
+export const getObservationsByTeacher = async (req, res) => {
+    try {
+        const { docenteId } = req.params;
+
+        console.log('🔍 Buscando observaciones para docente ID:', docenteId);
+
+        const observaciones = await Observation.find({
+            docenteId: new mongoose.Types.ObjectId(docenteId)
+        })
+        .populate('studentId', 'apellido1 apellido grado_especifico')
+        .sort({ fecha: -1 })
+        .limit(20);
+
+        console.log(`✅ Encontradas ${observaciones.length} observaciones`);
+
+        res.json({
+            success: true,
+            data: observaciones
+        });
+
+    } catch (error) {
+        console.error('❌ Error en getObservationsByTeacher:', error);
+        res.status(500).json({ 
+            success: false, 
+            message: error.message 
+        });
+    }
+};
+
+// Obtener observaciones por estudiante (para acudientes)
 export const getObservationsByStudent = async (req, res) => {
-  try {
-    const { studentId } = req.params;
+    try {
+        const { studentId } = req.params;
 
-    const data = await Observation.find({ studentId });
+        console.log('🔍 Buscando observaciones para estudiante ID:', studentId);
 
-    res.status(200).json(data);
+        const observaciones = await Observation.find({
+            studentId: studentId
+        })
+        .populate('docenteId', 'nombre')
+        .sort({ fecha: -1 })
+        .limit(20);
 
-  } catch (error) {
-    res.status(500).json({ error: "Error al obtener observaciones" });
-  }
+        console.log(`✅ Encontradas ${observaciones.length} observaciones`);
+
+        res.json({
+            success: true,
+            data: observaciones
+        });
+
+    } catch (error) {
+        console.error('❌ Error en getObservationsByStudent:', error);
+        res.status(500).json({ 
+            success: false, 
+            message: error.message 
+        });
+    }
 };
-
-
-// Observaciones por gravedad
-export const getObservationsByLevel = async (req, res) => {
-  try {
-    const { nivel } = req.params;
-
-    const data = await Observation.find({ nivel });
-
-    res.status(200).json(data);
-
-  } catch (error) {
-    res.status(500).json({ error: "Error al filtrar observaciones" });
-  }
-};
-

@@ -8,7 +8,9 @@
     "seed-admin": "node src/seed-admin.js",
     "kill-port": "node kill-port.js",
     "dev": "npm run kill-port && nodemon src/server.js",
-    "seed-users": "node src/seed-users-from-data.js"
+    "seed-users": "node src/seed-users-from-data.js",
+    "seed-teachers": "node src/seed-teachers-users-auto.js",
+    "seed-docentes": "node src/seed-docentes-unificados.js"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",

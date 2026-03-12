@@ -13,15 +13,21 @@ const attendanceSchema = new mongoose.Schema({
     },
     estado: {
         type: String,
-        enum: ['presente', 'ausente', 'tarde', 'excusa'],
+        enum: ['presente', 'ausente', 'tarde'],
         required: true
+    },
+    motivo: {
+        type: String,
+        enum: ['enfermedad', 'permiso', 'sin_justificar', 'otro', ''],
+        default: ''
+    },
+    observacion: {
+        type: String,
+        default: ''
     },
     registradoPor: {
         type: String,
         required: true
-    },
-    observacion: {
-        type: String
     }
 }, {
     timestamps: true

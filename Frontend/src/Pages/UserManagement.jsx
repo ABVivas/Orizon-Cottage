@@ -1,142 +1,262 @@
 // Frontend/src/Pages/UserManagement.jsx
 import { useState, useEffect } from 'react';
-import UserList from './UserList';
-import StudentList from "./StudentList";  // ✅ mayúsculas (como el archivo)
 
 const UserManagement = () => {
     const [users, setUsers] = useState([]);
-    const [students, setStudents] = useState([]);
     const [teachers, setTeachers] = useState([]);
+    const [students, setStudents] = useState([]);
     const [filteredData, setFilteredData] = useState({
-        estudiantes: [],
-        acudientes: [],
-        docentes: [],
-        directivos: [],
-        admins: []
+        users: [],
+        teachers: [],
+        students: []
     });
-    const [loading, setLoading] = useState(false);
-    
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState('');
+    const [activeTab, setActiveTab] = useState('users');
     const [filters, setFilters] = useState({
         rol: 'todos',
         estado: 'todos',
-        search: ''
+        search: '',
+        grado: 'todos',
+        codigo: '',
+        asignatura: 'todos'
     });
 
-    // Estadísticas por rol
+    // Estadísticas
     const [stats, setStats] = useState({
-        total: 0,
-        acudientes: 0,
+        totalUsers: 0,
+        totalTeachers: 0,
+        totalStudents: 0,
+        activos: 0,
+        inactivos: 0,
         docentes: 0,
+        acudientes: 0,
         directivos: 0,
         admins: 0,
-        activos: 0,
-        inactivos: 0
+        preescolar: 0,
+        primaria: 0,
+        secundaria: 0
     });
 
     useEffect(() => {
-        fetchUsers();
+        fetchAllData();
     }, []);
 
     useEffect(() => {
         applyFilters();
         calculateStats();
-    }, [users, filters]);
+    }, [users, teachers, students, filters, activeTab]);
 
-    const fetchUsers = async () => {
+    const fetchAllData = async () => {
         setLoading(true);
+        setError('');
+        
         try {
             const token = localStorage.getItem('token');
-            const response = await fetch('http://localhost:5000/api/users', {
-                headers: {
-                    'Authorization': `Bearer ${token}`
-                }
+            
+            // 1. Obtener usuarios (acudientes, directivos, admins)
+            const usersResponse = await fetch('http://localhost:5000/api/users', {
+                headers: { 'Authorization': `Bearer ${token}` }
             });
-            const data = await response.json();
-            if (data.success) {
-                setUsers(data.users);
+
+            if (!usersResponse.ok) {
+                throw new Error(`Error HTTP usuarios: ${usersResponse.status}`);
             }
+
+            const usersData = await usersResponse.json();
+            
+            if (usersData.success) {
+                setUsers(usersData.users || []);
+            }
+
+            // 2. Obtener docentes desde teachers
+            const teachersResponse = await fetch('http://localhost:5000/api/teachers', {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+
+            if (!teachersResponse.ok) {
+                throw new Error(`Error HTTP docentes: ${teachersResponse.status}`);
+            }
+
+            const teachersData = await teachersResponse.json();
+            console.log('👨‍🏫 Docentes recibidos:', teachersData);
+            
+            if (teachersData.success) {
+                setTeachers(teachersData.data || []);
+            }
+
+            // 3. Obtener estudiantes
+            const studentsResponse = await fetch('http://localhost:5000/api/students', {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+
+            if (!studentsResponse.ok) {
+                throw new Error(`Error HTTP estudiantes: ${studentsResponse.status}`);
+            }
+
+            const studentsData = await studentsResponse.json();
+            
+            if (studentsData.success) {
+                setStudents(studentsData.data || []);
+            }
+
         } catch (error) {
-            console.error('Error:', error);
+            console.error('❌ Error:', error);
+            setError(error.message);
         } finally {
             setLoading(false);
         }
     };
 
     const calculateStats = () => {
-        const stats = {
-            total: users.length,
+        setStats({
+            totalUsers: users.length,
+            totalTeachers: teachers.length,
+            totalStudents: students.length,
+            activos: users.filter(u => u.activo).length + teachers.length,
+            inactivos: users.filter(u => !u.activo).length,
+            docentes: teachers.length,
             acudientes: users.filter(u => u.rol === 'acudiente').length,
-            docentes: users.filter(u => u.rol === 'docente').length,
             directivos: users.filter(u => u.rol === 'directivo').length,
             admins: users.filter(u => u.rol === 'admin').length,
-            activos: users.filter(u => u.activo).length,
-            inactivos: users.filter(u => !u.activo).length
-        };
-        setStats(stats);
+            preescolar: students.filter(s => s.grado === 'preescolar').length,
+            primaria: students.filter(s => s.grado === 'primaria').length,
+            secundaria: students.filter(s => s.grado === 'secundaria').length
+        });
     };
 
     const applyFilters = () => {
-        let filtered = [...users];
+        // Filtrar usuarios (acudientes, directivos, admins)
+        let filteredUsers = [...users];
         
-        // Filtrar por rol
-        if (filters.rol !== 'todos') {
-            filtered = filtered.filter(u => u.rol === filters.rol);
+        if (filters.rol !== 'todos' && filters.rol !== 'docente') {
+            filteredUsers = filteredUsers.filter(u => u.rol === filters.rol);
         }
         
-        // Filtrar por estado
         if (filters.estado !== 'todos') {
             const isActive = filters.estado === 'activo';
-            filtered = filtered.filter(u => u.activo === isActive);
+            filteredUsers = filteredUsers.filter(u => u.activo === isActive);
         }
         
-        // Filtrar por búsqueda
-        if (filters.search) {
+        if (filters.search.trim() !== '') {
             const term = filters.search.toLowerCase();
-            filtered = filtered.filter(u => 
+            filteredUsers = filteredUsers.filter(u => 
                 u.nombre?.toLowerCase().includes(term) ||
                 u.numeroIdentificacion?.includes(term) ||
                 u.email?.toLowerCase().includes(term)
             );
         }
+
+        // Filtrar docentes
+        let filteredTeachers = [...teachers];
         
-        setFilteredUsers(filtered);
+        if (filters.codigo && filters.codigo.trim() !== '') {
+            const term = filters.codigo.toLowerCase();
+            filteredTeachers = filteredTeachers.filter(t => 
+                t.id_docente?.toString().toLowerCase().includes(term) ||
+                t.no?.toString().toLowerCase().includes(term)
+            );
+        }
+
+        // Filtro por asignatura
+        if (filters.asignatura && filters.asignatura !== 'todos') {
+            filteredTeachers = filteredTeachers.filter(t => 
+                t.asignatura?.toLowerCase() === filters.asignatura.toLowerCase()
+            );
+        }       
+
+        // Filtro por búsqueda general
+        if (filters.search.trim() !== '') {
+            const term = filters.search.toLowerCase();
+            filteredTeachers = filteredTeachers.filter(t => 
+                t.docente?.toLowerCase().includes(term) ||
+                t.id_docente?.toString().includes(term) ||
+                t.no?.toString().includes(term) ||
+                t.asignatura?.toLowerCase().includes(term) ||
+                t.grados?.toLowerCase().includes(term)
+            );
+        }
+        
+        // Filtrar estudiantes
+        let filteredStudents = [...students];
+        
+        if (activeTab === 'students') {
+            if (filters.grado !== 'todos') {
+                filteredStudents = filteredStudents.filter(s => s.grado === filters.grado);
+            }
+            
+            if (filters.search.trim() !== '') {
+                const term = filters.search.toLowerCase();
+                filteredStudents = filteredStudents.filter(s => 
+                    s.apellido1?.toLowerCase().includes(term) ||
+                    s.apellido?.toLowerCase().includes(term) ||
+                    s.id_estudiante?.includes(term) ||
+                    s.nombre_acudiente?.toLowerCase().includes(term)
+                );
+            }
+        }
+        
+        setFilteredData({
+            users: filteredUsers,
+            teachers: filteredTeachers,
+            students: filteredStudents
+        });
     };
 
     const handleFilterChange = (key, value) => {
-        setFilters({...filters, [key]: value});
+        setFilters(prev => ({ ...prev, [key]: value }));
     };
 
-    const handleCreateUser = () => {
-        // Abrir modal para crear usuario según el rol seleccionado
-        alert(`Crear nuevo ${filters.rol === 'todos' ? 'usuario' : filters.rol}`);
-    };
+    const grados = ['todos', ...new Set(students.map(s => s.grado).filter(Boolean))];
+    const asignaturas = ['todos', ...new Set(teachers.map(t => t.asignatura).filter(Boolean))];
+
+    if (loading) {
+        return (
+            <div style={styles.container}>
+                <h2 style={styles.title}>Gestión de Usuarios</h2>
+                <p>Cargando datos...</p>
+            </div>
+        );
+    }
+
+    if (error) {
+        return (
+            <div style={styles.container}>
+                <h2 style={styles.title}>Gestión de Usuarios</h2>
+                <div style={styles.error}>
+                    <p>Error: {error}</p>
+                    <button onClick={fetchAllData} style={styles.retryButton}>
+                        Reintentar
+                    </button>
+                </div>
+            </div>
+        );
+    }
 
     return (
-        <div>
-            {/* Header con título y botón de nuevo usuario */}
+        <div style={styles.container}>
             <div style={styles.header}>
-                <div>
-                    <h2 style={styles.title}>Gestión de Usuarios</h2>
-                    <p style={styles.subtitle}>Administre usuarios y roles del sistema</p>
-                </div>
-                <button style={styles.addButton} onClick={handleCreateUser}>
-                    + Nuevo Usuario
-                </button>
+                <h2 style={styles.title}>Gestión de Usuarios</h2>
+                <p style={styles.subtitle}>Administre usuarios, roles y estudiantes del sistema</p>
             </div>
 
             {/* Tarjetas de estadísticas */}
             <div style={styles.statsGrid}>
-                <div style={styles.statCard}>
-                    <span style={styles.statValue}>{stats.total}</span>
-                    <span style={styles.statLabel}>Total Usuarios</span>
+                <div style={styles.statCard} onClick={() => setActiveTab('users')}>
+                    <span style={styles.statValue}>{stats.totalUsers}</span>
+                    <span style={styles.statLabel}>Usuarios</span>
+                </div>
+                <div style={styles.statCard} onClick={() => setActiveTab('teachers')}>
+                    <span style={styles.statValue}>{stats.totalTeachers}</span>
+                    <span style={styles.statLabel}>Docentes</span>
+                </div>
+                <div style={styles.statCard} onClick={() => setActiveTab('students')}>
+                    <span style={styles.statValue}>{stats.totalStudents}</span>
+                    <span style={styles.statLabel}>Estudiantes</span>
                 </div>
                 <div style={{...styles.statCard, backgroundColor: '#27ae60'}}>
                     <span style={styles.statValue}>{stats.activos}</span>
                     <span style={styles.statLabel}>Activos</span>
-                </div>
-                <div style={{...styles.statCard, backgroundColor: '#e74c3c'}}>
-                    <span style={styles.statValue}>{stats.inactivos}</span>
-                    <span style={styles.statLabel}>Inactivos</span>
                 </div>
                 <div style={{...styles.statCard, backgroundColor: '#3498db'}}>
                     <span style={styles.statValue}>{stats.docentes}</span>
@@ -146,118 +266,289 @@ const UserManagement = () => {
                     <span style={styles.statValue}>{stats.acudientes}</span>
                     <span style={styles.statLabel}>Acudientes</span>
                 </div>
-                <div style={{...styles.statCard, backgroundColor: '#9b59b6'}}>
-                    <span style={styles.statValue}>{stats.directivos + stats.admins}</span>
-                    <span style={styles.statLabel}>Administrativos</span>
-                </div>
+            </div>
+
+            {/* Tabs de navegación */}
+            <div style={styles.tabsContainer}>
+                <button 
+                    style={{...styles.tab, ...(activeTab === 'users' && styles.activeTab)}}
+                    onClick={() => setActiveTab('users')}
+                >
+                    👥 Usuarios ({filteredData.users.length})
+                </button>
+                <button 
+                    style={{...styles.tab, ...(activeTab === 'teachers' && styles.activeTab)}}
+                    onClick={() => setActiveTab('teachers')}
+                >
+                    👨‍🏫 Docentes ({filteredData.teachers.length})
+                </button>
+                <button 
+                    style={{...styles.tab, ...(activeTab === 'students' && styles.activeTab)}}
+                    onClick={() => setActiveTab('students')}
+                >
+                    🧑‍🎓 Estudiantes ({filteredData.students.length})
+                </button>
             </div>
 
             {/* Filtros */}
             <div style={styles.filtersContainer}>
-                <div style={styles.filterGroup}>
-                    <label style={styles.filterLabel}>Rol</label>
-                    <select 
-                        value={filters.rol}
-                        onChange={(e) => handleFilterChange('rol', e.target.value)}
-                        style={styles.filterSelect}
-                    >
-                        <option value="todos">Todos los roles</option>
-                        <option value="acudiente">Acudientes</option>
-                        <option value="docente">Docentes</option>
-                        <option value="directivo">Directivos</option>
-                        <option value="admin">Administradores</option>
-                    </select>
-                </div>
+                {activeTab === 'users' && (
+                    <>
+                        <div style={styles.filterGroup}>
+                            <label style={styles.filterLabel}>Rol</label>
+                            <select 
+                                value={filters.rol}
+                                onChange={(e) => handleFilterChange('rol', e.target.value)}
+                                style={styles.filterSelect}
+                            >
+                                <option value="todos">Todos los roles</option>
+                                <option value="acudiente">Acudientes</option>
+                                <option value="directivo">Directivos</option>
+                                <option value="admin">Administradores</option>
+                            </select>
+                        </div>
 
-                <div style={styles.filterGroup}>
-                    <label style={styles.filterLabel}>Estado</label>
-                    <select 
-                        value={filters.estado}
-                        onChange={(e) => handleFilterChange('estado', e.target.value)}
-                        style={styles.filterSelect}
-                    >
-                        <option value="todos">Todos los estados</option>
-                        <option value="activo">Activo</option>
-                        <option value="inactivo">Inactivo</option>
-                    </select>
-                </div>
+                        <div style={styles.filterGroup}>
+                            <label style={styles.filterLabel}>Estado</label>
+                            <select 
+                                value={filters.estado}
+                                onChange={(e) => handleFilterChange('estado', e.target.value)}
+                                style={styles.filterSelect}
+                            >
+                                <option value="todos">Todos los estados</option>
+                                <option value="activo">Activo</option>
+                                <option value="inactivo">Inactivo</option>
+                            </select>
+                        </div>
+                    </>
+                )}
 
-                <div style={styles.filterGroup}>
-                    <label style={styles.filterLabel}>Buscar</label>
-                    <input
-                        type="text"
-                        value={filters.search}
-                        onChange={(e) => handleFilterChange('search', e.target.value)}
-                        placeholder="Buscar por nombre, ID o email..."
-                        style={styles.filterInput}
-                    />
-                </div>
+                {activeTab === 'teachers' && (
+                    <>
+                         <div style={styles.filterGroup}>
+                            <label style={styles.filterLabel}>Código</label>
+                            <input
+                                type="text"
+                                value={filters.codigo || ''}
+                                onChange={(e) => handleFilterChange('codigo', e.target.value)}
+                                placeholder="Filtrar por código..."
+                                style={styles.filterInput}
+                            />
+                        </div>
+
+                        <div style={styles.filterGroup}>
+                            <label style={styles.filterLabel}>Asignatura</label>
+                            <select 
+                                value={filters.asignatura}
+                                onChange={(e) => handleFilterChange('asignatura', e.target.value)}
+                                style={styles.filterSelect}
+                            >
+                                <option value="todos">Todas las asignaturas</option>
+                                {asignaturas.filter(a => a !== 'todos').map(asig => (
+                                    <option key={asig} value={asig}>{asig}</option>
+                                ))}
+                            </select>
+                        </div>
+
+                        <div style={styles.filterGroup}>
+                            <label style={styles.filterLabel}>Buscar</label>
+                            <input
+                                type="text"
+                                value={filters.search}
+                                onChange={(e) => handleFilterChange('search', e.target.value)}
+                                placeholder="Buscar por nombre, código o asignatura..."
+                                style={styles.filterInput}
+                            />
+                        </div>
+                    </>
+                )}
+
+                {activeTab === 'students' && (
+                    <>
+                        <div style={styles.filterGroup}>
+                            <label style={styles.filterLabel}>Grado</label>
+                            <select 
+                                value={filters.grado}
+                                onChange={(e) => handleFilterChange('grado', e.target.value)}
+                                style={styles.filterSelect}
+                            >
+                                <option value="todos">Todos los grados</option>
+                                {grados.filter(g => g !== 'todos').map(grado => (
+                                    <option key={grado} value={grado}>
+                                        {grado}
+                                    </option>
+                                ))}
+                            </select>
+                        </div>
+
+                        <div style={styles.filterGroup}>
+                            <label style={styles.filterLabel}>Buscar</label>
+                            <input
+                                type="text"
+                                value={filters.search}
+                                onChange={(e) => handleFilterChange('search', e.target.value)}
+                                placeholder="Buscar por nombre, ID o acudiente..."
+                                style={styles.filterInput}
+                            />
+                        </div>
+                    </>
+                )}
             </div>
 
-            {/* Lista de usuarios por rol */}
-            {loading ? (
-                <p>Cargando...</p>
-            ) : (
-                <div>
-                    {/* Mostrar diferentes secciones según el filtro */}
-                    {filters.rol === 'todos' ? (
-                        // Mostrar todos los roles agrupados
-                        <>
-                            {stats.docentes > 0 && (
-                                <UserList 
-                                    users={filteredUsers.filter(u => u.rol === 'docente')}
-                                    title="Docentes"
-                                    rol="docente"
-                                    onUserUpdate={fetchUsers}
-                                />
+            {/* Tablas según pestaña activa */}
+            <div style={styles.tableContainer}>
+                {activeTab === 'users' && (
+                    <table style={styles.table}>
+                        <thead>
+                            <tr style={styles.tableHeader}>
+                                <th style={styles.th}>Nombre</th>
+                                <th style={styles.th}>Identificación</th>
+                                <th style={styles.th}>Rol</th>
+                                <th style={styles.th}>Estado</th>
+                                <th style={styles.th}>Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {filteredData.users.length > 0 ? (
+                                filteredData.users.map((user) => (
+                                    <tr key={user._id} style={styles.tr}>
+                                        <td style={styles.td}>
+                                            <strong>{user.nombre}</strong>
+                                            <br />
+                                            <small style={styles.emailText}>{user.email || ''}</small>
+                                        </td>
+                                        <td style={styles.td}>{user.numeroIdentificacion}</td>
+                                        <td style={styles.td}>
+                                            <span style={{
+                                                ...styles.roleBadge,
+                                                backgroundColor: user.rol === 'admin' ? '#e74c3c' :
+                                                                user.rol === 'directivo' ? '#f39c12' : '#27ae60'
+                                            }}>
+                                                {user.rol}
+                                            </span>
+                                        </td>
+                                        <td style={styles.td}>
+                                            <span style={{
+                                                ...styles.statusBadge,
+                                                backgroundColor: user.activo ? '#27ae60' : '#e74c3c',
+                                                color: 'white'
+                                            }}>
+                                                {user.activo ? 'Activo' : 'Inactivo'}
+                                            </span>
+                                        </td>
+                                        <td style={styles.td}>
+                                            <button style={styles.actionButton}>🔒</button>
+                                            <button style={styles.actionButton}>🔑</button>
+                                        </td>
+                                    </tr>
+                                ))
+                            ) : (
+                                <tr>
+                                    <td colSpan="5" style={styles.emptyMessage}>
+                                        No hay usuarios para mostrar
+                                    </td>
+                                </tr>
                             )}
-                            {stats.acudientes > 0 && (
-                                <UserList 
-                                    users={filteredUsers.filter(u => u.rol === 'acudiente')}
-                                    title="Acudientes"
-                                    rol="acudiente"
-                                    onUserUpdate={fetchUsers}
-                                />
+                        </tbody>
+                    </table>
+                )}
+
+                {activeTab === 'teachers' && (
+                    <table style={styles.table}>
+                        <thead>
+                            <tr style={styles.tableHeader}>
+                                <th style={styles.th}>Código</th>
+                                <th style={styles.th}>Docente</th>
+                                <th style={styles.th}>Asignatura</th>
+                                <th style={styles.th}>Grados</th>
+                                <th style={styles.th}>Grupo</th>
+                                <th style={styles.th}>Horas</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                           {filteredData.teachers.length > 0 ? (
+                                filteredData.teachers.map((teacher) => (
+                                    <tr key={teacher._id || teacher.id} style={styles.tr}>
+                                        <td style={styles.td}>
+                                            <strong>{teacher.id_docente || teacher.no || 'N/A'}</strong>
+                                        </td>
+                                            <td style={styles.td}>
+                                            <strong>{teacher.docente}</strong>
+                                        </td>
+                                        <td style={styles.td}>{teacher.asignatura}</td>
+                                        <td style={styles.td}>{teacher.grados}</td>
+                                        <td style={styles.td}>{teacher.direccion_grupo}</td>
+                                        <td style={styles.td}>{teacher.horas_totales || teacher.horas_semanales}</td>
+                                    </tr>
+                                ))
+                            ) : (
+                                <tr>
+                                    <td colSpan="6" style={styles.emptyMessage}>
+                                        No hay docentes para mostrar
+                                    </td>
+                                </tr>
                             )}
-                            {stats.directivos > 0 && (
-                                <UserList 
-                                    users={filteredUsers.filter(u => u.rol === 'directivo')}
-                                    title="Directivos"
-                                    rol="directivo"
-                                    onUserUpdate={fetchUsers}
-                                />
+                        </tbody>
+                    </table>
+                )}
+
+                {activeTab === 'students' && (
+                    <table style={styles.table}>
+                        <thead>
+                            <tr style={styles.tableHeader}>
+                                <th style={styles.th}>ID Estudiante</th>
+                                <th style={styles.th}>Nombre Completo</th>
+                                <th style={styles.th}>Grado</th>
+                                <th style={styles.th}>Acudiente</th>
+                                <th style={styles.th}>Teléfono</th>
+                                <th style={styles.th}>Vereda</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {filteredData.students.length > 0 ? (
+                                filteredData.students.map((student) => (
+                                    <tr key={student._id} style={styles.tr}>
+                                        <td style={styles.td}>{student.id_estudiante}</td>
+                                        <td style={styles.td}>
+                                            <strong>{student.apellido1 || student.apellido || 'N/A'}</strong>
+                                        </td>
+                                        <td style={styles.td}>
+                                            <span style={{
+                                                ...styles.gradeBadge,
+                                                backgroundColor: student.grado === 'preescolar' ? '#27ae60' :
+                                                               student.grado === 'primaria' ? '#2980b9' : 
+                                                               student.grado === 'secundaria' ? '#8e44ad' : '#95a5a6'
+                                            }}>
+                                                {student.grado || 'N/A'}
+                                            </span>
+                                        </td>
+                                        <td style={styles.td}>{student.nombre_acudiente || '-'}</td>
+                                        <td style={styles.td}>{student.telefono || '-'}</td>
+                                        <td style={styles.td}>{student.vereda || '-'}</td>
+                                    </tr>
+                                ))
+                            ) : (
+                                <tr>
+                                    <td colSpan="6" style={styles.emptyMessage}>
+                                        No hay estudiantes para mostrar
+                                    </td>
+                                </tr>
                             )}
-                            {stats.admins > 0 && (
-                                <UserList 
-                                    users={filteredUsers.filter(u => u.rol === 'admin')}
-                                    title="Administradores"
-                                    rol="admin"
-                                    onUserUpdate={fetchUsers}
-                                />
-                            )}
-                        </>
-                    ) : (
-                        // Mostrar solo el rol seleccionado
-                        <UserList 
-                            users={filteredUsers}
-                            title={filters.rol === 'acudiente' ? 'Acudientes' :
-                                  filters.rol === 'docente' ? 'Docentes' :
-                                  filters.rol === 'directivo' ? 'Directivos' : 'Administradores'}
-                            rol={filters.rol}
-                            onUserUpdate={fetchUsers}
-                        />
-                    )}
-                </div>
-            )}
+                        </tbody>
+                    </table>
+                )}
+            </div>
         </div>
     );
 };
 
 const styles = {
+    container: {
+        padding: '20px',
+        maxWidth: '1400px',
+        margin: '0 auto'
+    },
     header: {
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center',
         marginBottom: '30px'
     },
     title: {
@@ -270,15 +561,21 @@ const styles = {
         color: '#7f8c8d',
         fontSize: '14px'
     },
-    addButton: {
+    error: {
+        padding: '20px',
+        backgroundColor: '#f8d7da',
+        color: '#721c24',
+        borderRadius: '5px',
+        textAlign: 'center'
+    },
+    retryButton: {
         padding: '10px 20px',
         backgroundColor: '#27ae60',
         color: 'white',
         border: 'none',
         borderRadius: '5px',
         cursor: 'pointer',
-        fontSize: '14px',
-        fontWeight: 'bold'
+        marginTop: '10px'
     },
     statsGrid: {
         display: 'grid',
@@ -292,7 +589,9 @@ const styles = {
         padding: '15px',
         borderRadius: '10px',
         textAlign: 'center',
-        boxShadow: '0 2px 10px rgba(0,0,0,0.1)'
+        boxShadow: '0 2px 10px rgba(0,0,0,0.1)',
+        cursor: 'pointer',
+        transition: 'transform 0.2s'
     },
     statValue: {
         display: 'block',
@@ -303,6 +602,27 @@ const styles = {
     statLabel: {
         fontSize: '12px',
         opacity: 0.9
+    },
+    tabsContainer: {
+        display: 'flex',
+        gap: '10px',
+        marginBottom: '20px',
+        borderBottom: '2px solid #ecf0f1',
+        paddingBottom: '10px'
+    },
+    tab: {
+        padding: '10px 20px',
+        border: 'none',
+        backgroundColor: 'transparent',
+        cursor: 'pointer',
+        fontSize: '16px',
+        color: '#7f8c8d',
+        borderRadius: '5px 5px 0 0'
+    },
+    activeTab: {
+        color: '#27ae60',
+        borderBottom: '2px solid #27ae60',
+        fontWeight: 'bold'
     },
     filtersContainer: {
         display: 'grid',
@@ -336,6 +656,75 @@ const styles = {
         border: '1px solid #bdc3c7',
         borderRadius: '5px',
         fontSize: '14px'
+    },
+    tableContainer: {
+        backgroundColor: 'white',
+        borderRadius: '10px',
+        boxShadow: '0 2px 10px rgba(0,0,0,0.1)',
+        overflowX: 'auto'
+    },
+    table: {
+        width: '100%',
+        borderCollapse: 'collapse'
+    },
+    tableHeader: {
+        backgroundColor: '#f8f9fa',
+        borderBottom: '2px solid #27ae60'
+    },
+    th: {
+        padding: '15px',
+        textAlign: 'left',
+        color: '#2c3e50',
+        fontSize: '14px',
+        fontWeight: 'bold'
+    },
+    tr: {
+        borderBottom: '1px solid #ecf0f1'
+    },
+    td: {
+        padding: '12px 15px',
+        fontSize: '14px'
+    },
+    emailText: {
+        color: '#7f8c8d',
+        fontSize: '12px'
+    },
+    roleBadge: {
+        padding: '4px 10px',
+        borderRadius: '20px',
+        color: 'white',
+        fontSize: '12px',
+        fontWeight: 'bold',
+        display: 'inline-block'
+    },
+    gradeBadge: {
+        padding: '4px 10px',
+        borderRadius: '20px',
+        color: 'white',
+        fontSize: '12px',
+        fontWeight: 'bold',
+        display: 'inline-block'
+    },
+    statusBadge: {
+        padding: '4px 10px',
+        borderRadius: '20px',
+        fontSize: '12px',
+        fontWeight: 'bold',
+        display: 'inline-block'
+    },
+    actionButton: {
+        margin: '0 5px',
+        padding: '5px 10px',
+        border: 'none',
+        borderRadius: '3px',
+        backgroundColor: 'transparent',
+        cursor: 'pointer',
+        fontSize: '16px'
+    },
+    emptyMessage: {
+        textAlign: 'center',
+        padding: '40px',
+        color: '#95a5a6'
     }
 };
 

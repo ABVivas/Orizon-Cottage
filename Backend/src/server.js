@@ -5,13 +5,20 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import connectDB from './Config/db.js';
 
+
 // Importar TODAS las rutas
 import studentRoutes from './Routes/student.routes.js';
 import attendanceRoutes from './Routes/attendance.routes.js';
 import observationRoutes from './Routes/observation.routes.js';
 import messageRoutes from './Routes/message.routes.js';
+
 import authRoutes from './Routes/auth.routes.js';
 import userRoutes from './Routes/user.routes.js';  // ← ¿ESTÁ ESTA LÍNEA?
+
+import teacherRoutes from './Routes/teacher.routes.js';
+import seguimientoRoutes from './Routes/seguimiento.routes.js';
+
+import directivoRoutes from './Routes/directivo.routes.js';
 
 dotenv.config();
 
@@ -36,6 +43,9 @@ app.use('/api/students', studentRoutes);
 app.use('/api/attendance', attendanceRoutes);
 app.use('/api/observations', observationRoutes);
 app.use('/api/messages', messageRoutes);
+app.use('/api/teachers', teacherRoutes);
+app.use('/api/seguimiento', seguimientoRoutes);
+app.use('/api/directivo', directivoRoutes);
 
 // Ruta de prueba
 app.get('/api/test', (req, res) => {

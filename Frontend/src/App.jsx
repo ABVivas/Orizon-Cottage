@@ -2,10 +2,19 @@
 import { useState, useEffect } from 'react';
 import Login from './Pages/Login';
 import AdminDashboard from './Pages/AdminDashboard';
-// Importaremos los otros dashboards cuando los creemos
-// import DirectivoDashboard from './Pages/DirectivoDashboard';
-// import DocenteDashboard from './Pages/DocenteDashboard';
-// import AcudienteDashboard from './Pages/AcudienteDashboard';
+import DocenteLayout from './Pages/DocenteLayout';
+import DocenteDashboard from './Pages/DocenteDashboard';
+import DocenteInasistencias from './Pages/DocenteInasistencias';
+import DocenteObservaciones from './Pages/DocenteObservaciones';
+import DocenteHistorial from './Pages/DocenteHistorial';
+import DocenteMensajeria from './Pages/DocenteMensajeria';
+import AcudienteDashboard from './Pages/AcudienteDashboard';
+import DirectivoLayout from './Pages/DirectivoLayout';
+import DirectivoDashboard from './Pages/DirectivoDashboard';
+import DirectivoSeguimiento from './Pages/DirectivoSeguimiento';
+import DirectivoReportes from './Pages/DirectivoReportes';
+import DirectivoUsuarios from './Pages/DirectivoUsuarios';
+import DirectivoMensajeria from './Pages/DirectivoMensajeria';
 
 function App() {
     const [apiUrl] = useState('http://localhost:5000/api');
@@ -15,6 +24,8 @@ function App() {
     const [loading, setLoading] = useState(false);
     const [message, setMessage] = useState('');
     const [error, setError] = useState('');
+    const [activeDocenteSection, setActiveDocenteSection] = useState('dashboard');
+    const [activeDirectivoSection, setActiveDirectivoSection] = useState('dashboard');
 
     // Agregar estilos globales verdes al cargar la app
     useEffect(() => {
@@ -105,6 +116,16 @@ function App() {
             .grade-preescolar { background-color: #27ae60; }
             .grade-primaria { background-color: #2980b9; }
             .grade-secundaria { background-color: #8e44ad; }
+
+            /* Responsive table */
+            @media (max-width: 768px) {
+                table {
+                    font-size: 12px;
+                }
+                th, td {
+                    padding: 8px;
+                }
+            }
         `;
         document.head.appendChild(style);
         
@@ -124,11 +145,9 @@ function App() {
         }
     }, []);
 
-    // Cargar estudiantes cuando se autentique (solo para la vista antigua)
+    // Cargar estudiantes cuando se autentique (solo para admin)
     useEffect(() => {
         if (isAuthenticated && user?.rol === 'admin') {
-            // Solo cargamos estudiantes si es admin y estamos en la vista antigua
-            // Esto se puede eliminar cuando migremos completamente
             getStudents();
         }
     }, [isAuthenticated, user]);
@@ -156,7 +175,6 @@ function App() {
             });
             
             if (response.status === 401) {
-                // Token expirado o inválido
                 localStorage.removeItem('token');
                 localStorage.removeItem('user');
                 setIsAuthenticated(false);
@@ -267,6 +285,8 @@ function App() {
         setStudents([]);
         setMessage('');
         setError('');
+        setActiveDocenteSection('dashboard');
+        setActiveDirectivoSection('dashboard');
     };
 
     // Si no está autenticado, mostrar login
@@ -274,7 +294,7 @@ function App() {
         return <Login onLogin={handleLogin} />;
     }
 
-    // Estilo para la barra superior (solo para la vista antigua)
+    // Estilo para la barra superior (solo para roles no-docente)
     const topBarStyle = {
         backgroundColor: '#27ae60',
         color: 'white',
@@ -290,7 +310,7 @@ function App() {
         boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
     };
 
-    // Estilo para el botón de logout (solo para la vista antigua)
+    // Estilo para el botón de logout (para roles no-docente)
     const logoutButtonStyle = {
         padding: '8px 15px',
         backgroundColor: '#e74c3c',
@@ -303,287 +323,90 @@ function App() {
         fontWeight: 'bold'
     };
 
+    // Función para renderizar el contenido del docente
+    const renderDocenteContent = () => {
+        let content;
+        switch(activeDocenteSection) {
+            case 'dashboard':
+                content = <DocenteDashboard user={user} />;
+                break;
+            case 'inasistencias':
+                content = <DocenteInasistencias user={user} />;
+                break;
+            case 'observaciones':
+                content = <DocenteObservaciones user={user} />;
+                break;
+            case 'historial':
+                content = <DocenteHistorial user={user} />;
+                break;
+            case 'mensajeria':
+                content = <DocenteMensajeria user={user} />;
+                break;
+            default:
+                content = <DocenteDashboard user={user} />;
+        }
+
+        return (
+            <DocenteLayout 
+                user={user} 
+                onLogout={handleLogout}
+                activeSection={activeDocenteSection}
+                setActiveSection={setActiveDocenteSection}
+            >
+                {content}
+            </DocenteLayout>
+        );
+    };
+
+    // Función para renderizar el contenido del directivo
+    const renderDirectivoContent = () => {
+        let content;
+        switch(activeDirectivoSection) {
+            case 'dashboard':
+                content = <DirectivoDashboard user={user} />;
+                break;
+            case 'seguimiento':
+                content = <DirectivoSeguimiento user={user} />;
+                break;
+            case 'reportes':
+                content = <DirectivoReportes user={user} />;
+                break;
+            case 'usuarios':
+                content = <DirectivoUsuarios user={user} />;
+                break;
+            case 'mensajeria':
+                content = <DirectivoMensajeria user={user} />;
+                break;
+            default:
+                content = <DirectivoDashboard user={user} />;
+        }
+
+        return (
+            <DirectivoLayout 
+                user={user} 
+                onLogout={handleLogout}
+                activeSection={activeDirectivoSection}
+                setActiveSection={setActiveDirectivoSection}
+            >
+                {content}
+            </DirectivoLayout>
+        );
+    };
+
     // Renderizar según el rol del usuario
     const renderContent = () => {
         switch(user?.rol) {
             case 'admin':
-                // Para admin, mostramos el nuevo Dashboard
                 return <AdminDashboard user={user} onLogout={handleLogout} />;
             
             case 'directivo':
-                // return <DirectivoDashboard user={user} onLogout={handleLogout} />;
-                return (
-                    <div>
-                        {/* Barra superior con valores institucionales */}
-                        <div style={topBarStyle}>
-                            <span>RESPONSABILIDAD</span>
-                            <span>SOLIDARIDAD</span>
-                            <span>HONESTIDAD</span>
-                            <span>RESPETO</span>
-                            <span>TOLERANCIA</span>
-                        </div>
-
-                        {/* Contenido principal temporal para directivo */}
-                        <div style={{ padding: '20px' }}>
-                            <div style={{ 
-                                display: 'flex', 
-                                justifyContent: 'space-between', 
-                                alignItems: 'center',
-                                marginBottom: '20px',
-                                padding: '15px',
-                                backgroundColor: '#f8f9fa',
-                                borderRadius: '8px',
-                                borderLeft: '4px solid #27ae60'
-                            }}>
-                                <h1 style={{ margin: 0, color: '#2c3e50' }}>
-                                    🏫 Orizon Cottage - Panel Directivo
-                                </h1>
-                                <div>
-                                    <span style={{ marginRight: '20px', fontWeight: 'bold', color: '#27ae60' }}>
-                                        👤 {user?.nombre} ({user?.rol})
-                                    </span>
-                                    <button 
-                                        onClick={handleLogout} 
-                                        style={logoutButtonStyle}
-                                        className="logout-btn"
-                                    >
-                                        Cerrar Sesión
-                                    </button>
-                                </div>
-                            </div>
-
-                            <div style={{ textAlign: 'center', padding: '50px' }}>
-                                <h2>🚧 Dashboard Directivo en construcción</h2>
-                                <p>Próximamente: Panel de control para directivos con reportes de convivencia, seguimiento de observaciones y gestión institucional.</p>
-                            </div>
-                        </div>
-                    </div>
-                );
+                return renderDirectivoContent();
             
             case 'docente':
-                // return <DocenteDashboard user={user} onLogout={handleLogout} />;
-                return (
-                    <div>
-                        {/* Barra superior con valores institucionales */}
-                        <div style={topBarStyle}>
-                            <span>RESPONSABILIDAD</span>
-                            <span>SOLIDARIDAD</span>
-                            <span>HONESTIDAD</span>
-                            <span>RESPETO</span>
-                            <span>TOLERANCIA</span>
-                        </div>
-
-                        {/* Contenido principal temporal para docente */}
-                        <div style={{ padding: '20px' }}>
-                            <div style={{ 
-                                display: 'flex', 
-                                justifyContent: 'space-between', 
-                                alignItems: 'center',
-                                marginBottom: '20px',
-                                padding: '15px',
-                                backgroundColor: '#f8f9fa',
-                                borderRadius: '8px',
-                                borderLeft: '4px solid #27ae60'
-                            }}>
-                                <h1 style={{ margin: 0, color: '#2c3e50' }}>
-                                    🏫 Orizon Cottage - Panel Docente
-                                </h1>
-                                <div>
-                                    <span style={{ marginRight: '20px', fontWeight: 'bold', color: '#27ae60' }}>
-                                        👤 {user?.nombre} ({user?.rol})
-                                    </span>
-                                    <button 
-                                        onClick={handleLogout} 
-                                        style={logoutButtonStyle}
-                                        className="logout-btn"
-                                    >
-                                        Cerrar Sesión
-                                    </button>
-                                </div>
-                            </div>
-
-                            <div style={{ textAlign: 'center', padding: '50px' }}>
-                                <h2>🚧 Dashboard Docente en construcción</h2>
-                                <p>Próximamente: Panel de control para docentes con registro de asistencia, observador digital y comunicación con acudientes.</p>
-                            </div>
-
-                            {/* Vista previa de la tabla de estudiantes (temporal) */}
-                            <h2 style={{ color: '#27ae60', borderBottom: '2px solid #27ae60', paddingBottom: '5px', marginTop: '40px' }}>
-                                📊 Listado de Estudiantes ({students.length})
-                            </h2>
-                            
-                            {/* Botones de control */}
-                            <div style={{ marginBottom: '20px' }}>
-                                <button 
-                                    onClick={testConnection}
-                                    style={buttonStyle}
-                                    className="filter-btn"
-                                >
-                                    🔌 Probar Conexión
-                                </button>
-                                
-                                <button 
-                                    onClick={() => getStudentsByGrade('todos')}
-                                    style={buttonStyle}
-                                    className="filter-btn"
-                                >
-                                    📋 Todos los Estudiantes
-                                </button>
-
-                                <button 
-                                    onClick={() => getStudentsByGrade('preescolar')}
-                                    style={buttonStyle}
-                                    className="filter-btn"
-                                >
-                                    🏫 Preescolar
-                                </button>
-
-                                <button 
-                                    onClick={() => getStudentsByGrade('primaria')}
-                                    style={buttonStyle}
-                                    className="filter-btn"
-                                >
-                                    📚 Primaria
-                                </button>
-
-                                <button 
-                                    onClick={() => getStudentsByGrade('secundaria')}
-                                    style={buttonStyle}
-                                    className="filter-btn"
-                                >
-                                    🎓 Secundaria
-                                </button>
-                            </div>
-
-                            {/* Mensajes de estado */}
-                            {message && (
-                                <div style={{ 
-                                    padding: '10px', 
-                                    backgroundColor: '#d4edda',
-                                    color: '#155724',
-                                    border: '1px solid #c3e6cb',
-                                    borderRadius: '5px',
-                                    marginBottom: '10px'
-                                }}>
-                                    {message}
-                                </div>
-                            )}
-
-                            {error && (
-                                <div style={{ 
-                                    padding: '10px', 
-                                    backgroundColor: '#f8d7da',
-                                    color: '#721c24',
-                                    border: '1px solid #f5c6cb',
-                                    borderRadius: '5px',
-                                    marginBottom: '10px'
-                                }}>
-                                    {error}
-                                </div>
-                            )}
-                            
-                            {loading ? (
-                                <p>Cargando datos...</p>
-                            ) : (
-                                <div className="table-container">
-                                    <table>
-                                        <thead>
-                                            <tr>
-                                                <th>No.</th>
-                                                <th>Nombre Completo</th>
-                                                <th>Grado</th>
-                                                <th>ID Estudiante</th>
-                                                <th>Acudiente</th>
-                                                <th>Teléfono</th>
-                                                <th>Vereda</th>
-                                                <th>Acciones</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            {students.length > 0 ? (
-                                                students.map((student, index) => (
-                                                    <tr key={student._id || index}>
-                                                        <td>{student.No || index + 1}</td>
-                                                        <td><strong>{student.apellido || 'N/A'}</strong></td>
-                                                        <td>
-                                                            <span className={`grade-badge grade-${student.grado || 'preescolar'}`}>
-                                                                {student.grado || 'N/A'}
-                                                            </span>
-                                                        </td>
-                                                        <td>{student.id_estudiante || 'N/A'}</td>
-                                                        <td>{student.nombre_acudiente || 'N/A'}</td>
-                                                        <td>{student.telefono || 'N/A'}</td>
-                                                        <td>{student.vereda || 'N/A'}</td>
-                                                        <td>
-                                                            <button style={actionButtonStyle} className="action-btn">👁️</button>
-                                                            <button style={actionButtonStyle} className="action-btn">✏️</button>
-                                                        </td>
-                                                    </tr>
-                                                ))
-                                            ) : (
-                                                <tr>
-                                                    <td colSpan="8" style={{ textAlign: 'center', padding: '30px' }}>
-                                                        {error ? 'Error al cargar datos' : 'No hay estudiantes para mostrar'}
-                                                    </td>
-                                                </tr>
-                                            )}
-                                        </tbody>
-                                    </table>
-                                </div>
-                            )}
-                        </div>
-                    </div>
-                );
+                return renderDocenteContent();
             
             case 'acudiente':
-                // return <AcudienteDashboard user={user} onLogout={handleLogout} />;
-                return (
-                    <div>
-                        {/* Barra superior con valores institucionales */}
-                        <div style={topBarStyle}>
-                            <span>RESPONSABILIDAD</span>
-                            <span>SOLIDARIDAD</span>
-                            <span>HONESTIDAD</span>
-                            <span>RESPETO</span>
-                            <span>TOLERANCIA</span>
-                        </div>
-
-                        {/* Contenido principal temporal para acudiente */}
-                        <div style={{ padding: '20px' }}>
-                            <div style={{ 
-                                display: 'flex', 
-                                justifyContent: 'space-between', 
-                                alignItems: 'center',
-                                marginBottom: '20px',
-                                padding: '15px',
-                                backgroundColor: '#f8f9fa',
-                                borderRadius: '8px',
-                                borderLeft: '4px solid #27ae60'
-                            }}>
-                                <h1 style={{ margin: 0, color: '#2c3e50' }}>
-                                    🏫 Orizon Cottage - Panel Acudiente
-                                </h1>
-                                <div>
-                                    <span style={{ marginRight: '20px', fontWeight: 'bold', color: '#27ae60' }}>
-                                        👤 {user?.nombre} ({user?.rol})
-                                    </span>
-                                    <button 
-                                        onClick={handleLogout} 
-                                        style={logoutButtonStyle}
-                                        className="logout-btn"
-                                    >
-                                        Cerrar Sesión
-                                    </button>
-                                </div>
-                            </div>
-
-                            <div style={{ textAlign: 'center', padding: '50px' }}>
-                                <h2>🚧 Dashboard Acudiente en construcción</h2>
-                                <p>Próximamente: Panel de control para acudientes con seguimiento de asistencia, observaciones y comunicación con docentes.</p>
-                            </div>
-                        </div>
-                    </div>
-                );
+                return <AcudienteDashboard user={user} onLogout={handleLogout} />;
             
             default:
                 return (

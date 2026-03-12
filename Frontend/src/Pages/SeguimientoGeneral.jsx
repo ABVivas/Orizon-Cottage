@@ -1,10 +1,17 @@
 // Frontend/src/Pages/SeguimientoGeneral.jsx
+// Frontend/src/Pages/SeguimientoGeneral.jsx
 import { useState, useEffect } from 'react';
 
 const SeguimientoGeneral = () => {
-    const [students, setStudents] = useState([]);
-    const [filteredStudents, setFilteredStudents] = useState([]);
-    const [loading, setLoading] = useState(false);
+    const [data, setData] = useState([]);
+    const [filteredData, setFilteredData] = useState([]);
+    const [stats, setStats] = useState({
+        total: 0,
+        casosGraves: 0,
+        totalInasistencias: 0
+    });
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState('');
     const [filters, setFilters] = useState({
         curso: 'todos',
         nivel: 'todos',
@@ -12,99 +19,132 @@ const SeguimientoGeneral = () => {
         fecha: ''
     });
 
-    // Datos de ejemplo (luego se conectará al backend)
-    const [observations, setObservations] = useState([
-        {
-            id: 1,
-            estudiante: 'Juan Pérez López',
-            curso: '6A',
-            observaciones: 3,
-            inasistencias: 5,
-            nivel: 'Tipo 2',
-            ultimaObservacion: '2025-10-01',
-            tipo: 'Disciplinaria'
-        },
-        {
-            id: 2,
-            estudiante: 'María González García',
-            curso: '7B',
-            observaciones: 1,
-            inasistencias: 2,
-            nivel: 'Tipo 1',
-            ultimaObservacion: '2025-09-28',
-            tipo: 'Académica'
-        },
-        {
-            id: 3,
-            estudiante: 'Carlos Rodríguez Silva',
-            curso: '8A',
-            observaciones: 5,
-            inasistencias: 8,
-            nivel: 'Tipo 3',
-            ultimaObservacion: '2025-10-02',
-            tipo: 'Disciplinaria'
-        },
-        {
-            id: 4,
-            estudiante: 'Ana Martínez López',
-            curso: '6A',
-            observaciones: 2,
-            inasistencias: 3,
-            nivel: 'Tipo 2',
-            ultimaObservacion: '2025-09-30',
-            tipo: 'Académica'
-        }
-    ]);
-
     // Obtener cursos únicos para el filtro
-    const cursos = ['todos', ...new Set(observations.map(o => o.curso))];
-    const niveles = ['todos', 'Tipo 1', 'Tipo 2', 'Tipo 3'];
-    const tipos = ['todos', 'Académica', 'Disciplinaria'];
+    const [cursos, setCursos] = useState(['todos']);
+    const niveles = ['todos', 'Leve', 'Medio', 'Grave', 'Tipo 1', 'Tipo 2', 'Tipo 3'];
+    const tipos = ['todos', 'Académica', 'Disciplinaria', 'General'];
+
+    useEffect(() => {
+        fetchData();
+    }, []);
 
     useEffect(() => {
         applyFilters();
-    }, [filters, observations]);
+    }, [filters, data]);
+
+    const fetchData = async () => {
+        setLoading(true);
+        try {
+            const token = localStorage.getItem('token');
+            const response = await fetch('http://localhost:5000/api/seguimiento', {
+                headers: {
+                    'Authorization': `Bearer ${token}`
+                }
+            });
+
+            if (!response.ok) {
+                throw new Error(`Error HTTP: ${response.status}`);
+            }
+
+            const result = await response.json();
+            console.log('📊 Datos de seguimiento:', result);
+
+            if (result.success) {
+                setData(result.data);
+                setStats(result.stats);
+                
+                // Extraer cursos únicos
+                const uniqueCursos = ['todos', ...new Set(result.data.map(d => d.curso).filter(Boolean))];
+                setCursos(uniqueCursos);
+            }
+        } catch (error) {
+            console.error('❌ Error:', error);
+            setError(error.message);
+        } finally {
+            setLoading(false);
+        }
+    };
 
     const applyFilters = () => {
-        let filtered = [...observations];
+        let filtered = [...data];
         
-        if (filters.curso !== 'todos') {
-            filtered = filtered.filter(o => o.curso === filters.curso);
+        if (filters.curso && filters.curso !== 'todos') {
+            filtered = filtered.filter(item => item.curso === filters.curso);
         }
-        if (filters.nivel !== 'todos') {
-            filtered = filtered.filter(o => o.nivel === filters.nivel);
+        
+        if (filters.nivel && filters.nivel !== 'todos') {
+            filtered = filtered.filter(item => 
+                item.nivel?.toLowerCase() === filters.nivel.toLowerCase()
+            );
         }
-        if (filters.tipo !== 'todos') {
-            filtered = filtered.filter(o => o.tipo === filters.tipo);
+        
+        if (filters.tipo && filters.tipo !== 'todos') {
+            filtered = filtered.filter(item => 
+                item.tipo?.toLowerCase() === filters.tipo.toLowerCase()
+            );
         }
+        
         if (filters.fecha) {
-            filtered = filtered.filter(o => o.ultimaObservacion === filters.fecha);
+            filtered = filtered.filter(item => {
+                const itemDate = new Date(item.fecha).toISOString().split('T')[0];
+                return itemDate === filters.fecha;
+            });
         }
         
-        setFilteredStudents(filtered);
+        setFilteredData(filtered);
     };
 
     const handleFilterChange = (key, value) => {
-        setFilters({...filters, [key]: value});
+        setFilters(prev => ({ ...prev, [key]: value }));
     };
 
     const verDetalle = (estudiante) => {
         alert(`Ver detalle de ${estudiante.estudiante}`);
+        // Aquí puedes navegar a una página de detalle
     };
 
     const generarPlan = (estudiante) => {
         alert(`Generar plan de mejora para ${estudiante.estudiante}`);
+        // Aquí puedes abrir un modal para crear plan
     };
 
+    const formatDate = (dateString) => {
+        if (!dateString) return 'N/A';
+        const date = new Date(dateString);
+        return date.toLocaleDateString('es-ES');
+    };
+
+    if (loading) {
+        return (
+            <div style={styles.container}>
+                <h2 style={styles.title}>Seguimiento General</h2>
+                <p>Cargando datos...</p>
+            </div>
+        );
+    }
+
+    if (error) {
+        return (
+            <div style={styles.container}>
+                <h2 style={styles.title}>Seguimiento General</h2>
+                <div style={styles.error}>
+                    <p>Error: {error}</p>
+                    <button onClick={fetchData} style={styles.retryButton}>
+                        Reintentar
+                    </button>
+                </div>
+            </div>
+        );
+    }
+
     return (
-        <div>
-            {/* Header */}
+        <div style={styles.container}>
             <div style={styles.header}>
                 <h2 style={styles.title}>Seguimiento General</h2>
                 <p style={styles.subtitle}>Monitoreo de observaciones y correctivos</p>
             </div>
 
-            {/* Filtros de búsqueda */}
+            {/* Filtros */}
             <div style={styles.filtersContainer}>
                 <div style={styles.filterGroup}>
                     <label style={styles.filterLabel}>Curso</label>
@@ -158,7 +198,6 @@ const SeguimientoGeneral = () => {
                         value={filters.fecha}
                         onChange={(e) => handleFilterChange('fecha', e.target.value)}
                         style={styles.filterInput}
-                        placeholder="dd/mm/aaaa"
                     />
                 </div>
             </div>
@@ -180,41 +219,43 @@ const SeguimientoGeneral = () => {
                         </tr>
                     </thead>
                     <tbody>
-                        {filteredStudents.length > 0 ? (
-                            filteredStudents.map((student) => (
-                                <tr key={student.id} style={styles.tr}>
+                        {filteredData.length > 0 ? (
+                            filteredData.map((item, index) => (
+                                <tr key={item._id || index} style={styles.tr}>
                                     <td style={styles.td}>
-                                        <strong>{student.estudiante}</strong>
+                                        <strong>{item.estudiante}</strong>
                                     </td>
-                                    <td style={styles.td}>{student.curso}</td>
+                                    <td style={styles.td}>{item.curso}</td>
                                     <td style={styles.td}>
-                                        <span style={styles.badge}>{student.observaciones}</span>
+                                        <span style={styles.badge}>{item.observaciones}</span>
                                     </td>
                                     <td style={styles.td}>
-                                        <span style={styles.badge}>{student.inasistencias}</span>
+                                        <span style={styles.badge}>{item.inasistencias}</span>
                                     </td>
                                     <td style={styles.td}>
                                         <span style={{
                                             ...styles.nivelBadge,
-                                            backgroundColor: student.nivel === 'Tipo 1' ? '#27ae60' :
-                                                             student.nivel === 'Tipo 2' ? '#f39c12' : '#e74c3c'
+                                            backgroundColor: 
+                                                item.nivel === 'Leve' || item.nivel === 'Tipo 1' ? '#27ae60' :
+                                                item.nivel === 'Medio' || item.nivel === 'Tipo 2' ? '#f39c12' :
+                                                item.nivel === 'Grave' || item.nivel === 'Tipo 3' ? '#e74c3c' : '#95a5a6'
                                         }}>
-                                            {student.nivel}
+                                            {item.nivel}
                                         </span>
                                     </td>
                                     <td style={styles.td}>
-                                        {new Date(student.ultimaObservacion).toLocaleDateString()}
+                                        {formatDate(item.fecha)}
                                     </td>
                                     <td style={styles.td}>
                                         <button 
                                             style={styles.actionButton}
-                                            onClick={() => verDetalle(student)}
+                                            onClick={() => verDetalle(item)}
                                         >
                                             Ver Detalle
                                         </button>
                                         <button 
                                             style={styles.planButton}
-                                            onClick={() => generarPlan(student)}
+                                            onClick={() => generarPlan(item)}
                                         >
                                             Generar Plan
                                         </button>
@@ -232,23 +273,19 @@ const SeguimientoGeneral = () => {
                 </table>
             </div>
 
-            {/* Resumen rápido */}
-            <div style={styles.summaryContainer}>
-                <div style={styles.summaryCard}>
-                    <span style={styles.summaryValue}>{observations.length}</span>
-                    <span style={styles.summaryLabel}>Total con observaciones</span>
+            {/* Resumen estadístico */}
+            <div style={styles.statsContainer}>
+                <div style={styles.statCard}>
+                    <span style={styles.statValue}>{stats.total}</span>
+                    <span style={styles.statLabel}>Total con observaciones</span>
                 </div>
-                <div style={styles.summaryCard}>
-                    <span style={styles.summaryValue}>
-                        {observations.filter(o => o.nivel === 'Tipo 3').length}
-                    </span>
-                    <span style={styles.summaryLabel}>Casos graves</span>
+                <div style={styles.statCard}>
+                    <span style={styles.statValue}>{stats.casosGraves}</span>
+                    <span style={styles.statLabel}>Casos graves</span>
                 </div>
-                <div style={styles.summaryCard}>
-                    <span style={styles.summaryValue}>
-                        {observations.reduce((sum, o) => sum + o.inasistencias, 0)}
-                    </span>
-                    <span style={styles.summaryLabel}>Total inasistencias</span>
+                <div style={styles.statCard}>
+                    <span style={styles.statValue}>{stats.totalInasistencias}</span>
+                    <span style={styles.statLabel}>Total inasistencias</span>
                 </div>
             </div>
         </div>
@@ -256,6 +293,11 @@ const SeguimientoGeneral = () => {
 };
 
 const styles = {
+    container: {
+        padding: '20px',
+        maxWidth: '1400px',
+        margin: '0 auto'
+    },
     header: {
         marginBottom: '30px'
     },
@@ -268,6 +310,22 @@ const styles = {
         margin: 0,
         color: '#7f8c8d',
         fontSize: '14px'
+    },
+    error: {
+        padding: '20px',
+        backgroundColor: '#f8d7da',
+        color: '#721c24',
+        borderRadius: '5px',
+        textAlign: 'center'
+    },
+    retryButton: {
+        padding: '10px 20px',
+        backgroundColor: '#27ae60',
+        color: 'white',
+        border: 'none',
+        borderRadius: '5px',
+        cursor: 'pointer',
+        marginTop: '10px'
     },
     filtersContainer: {
         display: 'grid',
@@ -339,10 +397,11 @@ const styles = {
     badge: {
         backgroundColor: '#27ae60',
         color: 'white',
-        padding: '3px 8px',
+        padding: '4px 8px',
         borderRadius: '12px',
         fontSize: '12px',
-        fontWeight: 'bold'
+        fontWeight: 'bold',
+        display: 'inline-block'
     },
     nivelBadge: {
         padding: '4px 10px',
@@ -353,7 +412,7 @@ const styles = {
         display: 'inline-block'
     },
     actionButton: {
-        padding: '5px 10px',
+        padding: '6px 12px',
         marginRight: '5px',
         border: 'none',
         borderRadius: '3px',
@@ -363,7 +422,7 @@ const styles = {
         fontSize: '12px'
     },
     planButton: {
-        padding: '5px 10px',
+        padding: '6px 12px',
         border: 'none',
         borderRadius: '3px',
         backgroundColor: '#27ae60',
@@ -376,26 +435,26 @@ const styles = {
         padding: '40px',
         color: '#95a5a6'
     },
-    summaryContainer: {
+    statsContainer: {
         display: 'grid',
         gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
         gap: '20px'
     },
-    summaryCard: {
+    statCard: {
         backgroundColor: 'white',
         padding: '20px',
         borderRadius: '10px',
         boxShadow: '0 2px 10px rgba(0,0,0,0.1)',
         textAlign: 'center'
     },
-    summaryValue: {
+    statValue: {
         display: 'block',
         fontSize: '28px',
         fontWeight: 'bold',
         color: '#2c3e50',
         marginBottom: '5px'
     },
-    summaryLabel: {
+    statLabel: {
         color: '#7f8c8d',
         fontSize: '14px'
     }

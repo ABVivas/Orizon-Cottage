@@ -9,6 +9,7 @@ import { verifyToken } from '../Middleware/auth.middleware.js';
 
 const router = express.Router();
 
+// Rutas
 router.post('/', verifyToken, registerAttendance);
 router.get('/', verifyToken, getAttendanceByDate);
 router.get('/summary', verifyToken, getAttendanceSummary);

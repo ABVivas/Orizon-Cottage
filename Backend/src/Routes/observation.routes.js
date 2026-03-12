@@ -1,19 +1,17 @@
-import express from "express";
+// Backend/src/Routes/observation.routes.js
+import express from 'express';
 import {
-  createObservation,
-  getObservationsByStudent,
-  getObservationsByLevel
-} from "../Logic/observation.controller.js";
+    createObservation,
+    getObservationsByTeacher,
+    getObservationsByStudent
+} from '../Logic/observation.controller.js';
+import { verifyToken } from '../Middleware/auth.middleware.js';
 
 const router = express.Router();
 
-// Registrar nueva observación
-router.post("/", createObservation);
-
-// Obtener observaciones por estudiante
-router.get("/student/:studentId", getObservationsByStudent);
-
-// Filtrar por nivel de gravedad
-router.get("/nivel/:nivel", getObservationsByLevel);
+// Rutas
+router.post('/', verifyToken, createObservation);                 // Crear observación
+router.get('/docente/:docenteId', verifyToken, getObservationsByTeacher);  // Por docente
+router.get('/estudiante/:studentId', verifyToken, getObservationsByStudent); // Por estudiante
 
 export default router;

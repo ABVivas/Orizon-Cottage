@@ -1,32 +1,51 @@
 // Backend/src/Logic/attendance.controller.js
 import Attendance from '../Data/attendance.model.js';
-import Student from '../Data/student.model.js';
 
 // Registrar asistencia
 export const registerAttendance = async (req, res) => {
     try {
-        const { studentId, fecha, estado, registradoPor } = req.body;
+        const { studentId, fecha, estado, motivo, observacion, registradoPor } = req.body;
+
+        console.log('📝 Registrando asistencia:', { studentId, fecha, estado, motivo, observacion });
         
+        // Validar campos requeridos
+        if (!studentId || !fecha || !estado || !registradoPor) {
+            return res.status(400).json({
+                success: false,
+                message: 'Faltan campos requeridos'
+            });
+        }
+
+        // Crear objeto de fecha
+        const fechaObj = new Date(fecha);
+        fechaObj.setHours(0, 0, 0, 0);
+
         // Verificar si ya existe registro para este estudiante en esta fecha
         let attendance = await Attendance.findOne({
             studentId,
-            fecha: new Date(fecha)
+            fecha: fechaObj
         });
 
         if (attendance) {
             // Actualizar existente
             attendance.estado = estado;
+            attendance.motivo = motivo || '';
+            attendance.observacion = observacion || '';
             attendance.registradoPor = registradoPor;
             await attendance.save();
+            console.log('✅ Asistencia actualizada:', attendance._id);
         } else {
             // Crear nuevo
             attendance = new Attendance({
                 studentId,
-                fecha,
+                fecha: fechaObj,
                 estado,
+                motivo: motivo || '',
+                observacion: observacion || '',
                 registradoPor
             });
             await attendance.save();
+            console.log('✅ Asistencia creada:', attendance._id);
         }
 
         res.json({
@@ -35,9 +54,11 @@ export const registerAttendance = async (req, res) => {
             attendance
         });
     } catch (error) {
+        console.error('❌ Error al registrar asistencia:', error);
         res.status(500).json({
             success: false,
-            message: error.message
+            message: 'Error al registrar asistencia',
+            error: error.message
         });
     }
 };
@@ -46,6 +67,14 @@ export const registerAttendance = async (req, res) => {
 export const getAttendanceByDate = async (req, res) => {
     try {
         const { date } = req.query;
+        
+        if (!date) {
+            return res.status(400).json({
+                success: false,
+                message: 'Fecha requerida'
+            });
+        }
+
         const startDate = new Date(date);
         startDate.setHours(0, 0, 0, 0);
         
@@ -54,13 +83,16 @@ export const getAttendanceByDate = async (req, res) => {
 
         const attendance = await Attendance.find({
             fecha: { $gte: startDate, $lte: endDate }
-        }).populate('studentId', 'apellido grado id_estudiante');
+        }).populate('studentId', 'apellido1 apellido grado grado_especifico');
 
+        console.log('📤 Enviando', attendance.length, 'registros de asistencia');
+        
         res.json({
             success: true,
             attendance
         });
     } catch (error) {
+        console.error('❌ Error al obtener asistencia:', error);
         res.status(500).json({
             success: false,
             message: error.message
@@ -73,6 +105,13 @@ export const getAttendanceSummary = async (req, res) => {
     try {
         const { startDate, endDate } = req.query;
         
+        if (!startDate || !endDate) {
+            return res.status(400).json({
+                success: false,
+                message: 'Fechas de inicio y fin requeridas'
+            });
+        }
+
         const summary = await Attendance.aggregate([
             {
                 $match: {
@@ -95,6 +134,7 @@ export const getAttendanceSummary = async (req, res) => {
             summary
         });
     } catch (error) {
+        console.error('❌ Error al obtener resumen:', error);
         res.status(500).json({
             success: false,
             message: error.message
