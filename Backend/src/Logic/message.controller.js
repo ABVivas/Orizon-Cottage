@@ -1,3 +1,4 @@
+// Backend/src/Logic/message.controller.js
 import Message from "../Data/message.model.js";
 
 // Crear un mensaje

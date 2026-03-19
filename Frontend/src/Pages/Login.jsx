@@ -15,20 +15,21 @@ const Login = ({ onLogin }) => {
     }, []);
 
     const checkServerConnection = async () => {
-        try {
-            const response = await fetch('http://localhost:5000/api/test');
-            if (response.ok) {
-                setServerStatus('online');
-                setError('');
-            } else {
-                setServerStatus('offline');
-                setError('Servidor no responde correctamente');
-            }
-        } catch (err) {
+    try {
+        // IMPORTANTE: Usar localhost, NO 127.0.0.1
+        const response = await fetch('http://localhost:5000/api/test');
+        if (response.ok) {
+            setServerStatus('online');
+            setError('');
+        } else {
             setServerStatus('offline');
-            setError('No se puede conectar con el servidor. Verifique que el backend esté corriendo.');
+            setError('Servidor no responde correctamente');
         }
-    };
+    } catch (err) {
+        setServerStatus('offline');
+        setError('No se puede conectar con el servidor. Verifique que el backend esté corriendo.');
+    }
+};
 
     const handleSubmit = async (e) => {
         e.preventDefault();
@@ -36,16 +37,17 @@ const Login = ({ onLogin }) => {
         setLoading(true);
 
         try {
-            const response = await fetch('http://localhost:5000/api/auth/login', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({ 
-                    numeroIdentificacion, 
-                    password 
-                })
-            });
+        // IMPORTANTE: Usar localhost
+        const response = await fetch('http://localhost:5000/api/auth/login', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                numeroIdentificacion,
+                password
+            })
+        });
 
             const data = await response.json();
 

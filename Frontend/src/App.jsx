@@ -2,19 +2,29 @@
 import { useState, useEffect } from 'react';
 import Login from './Pages/Login';
 import AdminDashboard from './Pages/AdminDashboard';
+
+// Docente
 import DocenteLayout from './Pages/DocenteLayout';
 import DocenteDashboard from './Pages/DocenteDashboard';
 import DocenteInasistencias from './Pages/DocenteInasistencias';
 import DocenteObservaciones from './Pages/DocenteObservaciones';
 import DocenteHistorial from './Pages/DocenteHistorial';
 import DocenteMensajeria from './Pages/DocenteMensajeria';
-import AcudienteDashboard from './Pages/AcudienteDashboard';
+
+// Directivo
 import DirectivoLayout from './Pages/DirectivoLayout';
 import DirectivoDashboard from './Pages/DirectivoDashboard';
 import DirectivoSeguimiento from './Pages/DirectivoSeguimiento';
 import DirectivoReportes from './Pages/DirectivoReportes';
 import DirectivoUsuarios from './Pages/DirectivoUsuarios';
 import DirectivoMensajeria from './Pages/DirectivoMensajeria';
+
+// Acudiente
+import AcudienteLayout from './Pages/AcudienteLayout';
+import AcudienteDashboard from './Pages/AcudienteDashboard';
+import AcudienteAsistencia from './Pages/AcudienteAsistencia';
+import AcudienteObservaciones from './Pages/AcudienteObservaciones';
+import AcudienteMensajeria from './Pages/AcudienteMensajeria';
 
 function App() {
     const [apiUrl] = useState('http://localhost:5000/api');
@@ -24,8 +34,11 @@ function App() {
     const [loading, setLoading] = useState(false);
     const [message, setMessage] = useState('');
     const [error, setError] = useState('');
+    
+    // Estados para navegación por roles
     const [activeDocenteSection, setActiveDocenteSection] = useState('dashboard');
     const [activeDirectivoSection, setActiveDirectivoSection] = useState('dashboard');
+    const [activeAcudienteSection, setActiveAcudienteSection] = useState('dashboard');
 
     // Agregar estilos globales verdes al cargar la app
     useEffect(() => {
@@ -287,6 +300,7 @@ function App() {
         setError('');
         setActiveDocenteSection('dashboard');
         setActiveDirectivoSection('dashboard');
+        setActiveAcudienteSection('dashboard');
     };
 
     // Si no está autenticado, mostrar login
@@ -393,6 +407,38 @@ function App() {
         );
     };
 
+    // Función para renderizar el contenido del acudiente
+    const renderAcudienteContent = () => {
+        let content;
+        switch(activeAcudienteSection) {
+            case 'dashboard':
+                content = <AcudienteDashboard user={user} setActiveSection={setActiveAcudienteSection} />;
+                break;
+            case 'asistencia':
+                content = <AcudienteAsistencia user={user} />;
+                break;
+            case 'observaciones':
+                content = <AcudienteObservaciones user={user} />;
+                break;
+            case 'mensajeria':
+                content = <AcudienteMensajeria user={user} />;
+                break;
+            default:
+                content = <AcudienteDashboard user={user} setActiveSection={setActiveAcudienteSection} />;
+        }
+
+        return (
+            <AcudienteLayout 
+                user={user} 
+                onLogout={handleLogout}
+                activeSection={activeAcudienteSection}
+                setActiveSection={setActiveAcudienteSection}
+            >
+                {content}
+            </AcudienteLayout>
+        );
+    };
+
     // Renderizar según el rol del usuario
     const renderContent = () => {
         switch(user?.rol) {
@@ -406,7 +452,7 @@ function App() {
                 return renderDocenteContent();
             
             case 'acudiente':
-                return <AcudienteDashboard user={user} onLogout={handleLogout} />;
+                return renderAcudienteContent();
             
             default:
                 return (

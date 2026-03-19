@@ -1,13 +1,16 @@
 // Backend/src/Logic/attendance.controller.js
+
 import Attendance from '../Data/attendance.model.js';
 
-// Registrar asistencia
+// ===========================================
+// REGISTRAR ASISTENCIA
+// ===========================================
 export const registerAttendance = async (req, res) => {
     try {
         const { studentId, fecha, estado, motivo, observacion, registradoPor } = req.body;
 
         console.log('📝 Registrando asistencia:', { studentId, fecha, estado, motivo, observacion });
-        
+
         // Validar campos requeridos
         if (!studentId || !fecha || !estado || !registradoPor) {
             return res.status(400).json({
@@ -53,6 +56,7 @@ export const registerAttendance = async (req, res) => {
             message: 'Asistencia registrada',
             attendance
         });
+
     } catch (error) {
         console.error('❌ Error al registrar asistencia:', error);
         res.status(500).json({
@@ -63,11 +67,13 @@ export const registerAttendance = async (req, res) => {
     }
 };
 
-// Obtener asistencia por fecha
+// ===========================================
+// OBTENER ASISTENCIA POR FECHA
+// ===========================================
 export const getAttendanceByDate = async (req, res) => {
     try {
         const { date } = req.query;
-        
+
         if (!date) {
             return res.status(400).json({
                 success: false,
@@ -77,7 +83,7 @@ export const getAttendanceByDate = async (req, res) => {
 
         const startDate = new Date(date);
         startDate.setHours(0, 0, 0, 0);
-        
+
         const endDate = new Date(date);
         endDate.setHours(23, 59, 59, 999);
 
@@ -86,11 +92,12 @@ export const getAttendanceByDate = async (req, res) => {
         }).populate('studentId', 'apellido1 apellido grado grado_especifico');
 
         console.log('📤 Enviando', attendance.length, 'registros de asistencia');
-        
+
         res.json({
             success: true,
             attendance
         });
+
     } catch (error) {
         console.error('❌ Error al obtener asistencia:', error);
         res.status(500).json({
@@ -100,11 +107,49 @@ export const getAttendanceByDate = async (req, res) => {
     }
 };
 
-// Obtener resumen de asistencia
+// ===========================================
+// OBTENER ASISTENCIA POR ESTUDIANTE
+// ===========================================
+export const getAttendanceByStudent = async (req, res) => {
+    try {
+        const { studentId } = req.params;
+        const { limit } = req.query;
+
+        console.log(`🔍 Buscando asistencias para estudiante: ${studentId}`);
+
+        // Construir query
+        let query = Attendance.find({ studentId }).sort({ fecha: -1 }); // más recientes primero
+
+        // Aplicar límite si viene en la query
+        if (limit) {
+            query = query.limit(parseInt(limit));
+        }
+
+        const asistencias = await query;
+
+        console.log(`✅ Encontradas ${asistencias.length} asistencias`);
+
+        res.json({
+            success: true,
+            data: asistencias
+        });
+
+    } catch (error) {
+        console.error('❌ Error al obtener asistencias por estudiante:', error);
+        res.status(500).json({
+            success: false,
+            message: error.message
+        });
+    }
+};
+
+// ===========================================
+// OBTENER RESUMEN DE ASISTENCIA
+// ===========================================
 export const getAttendanceSummary = async (req, res) => {
     try {
         const { startDate, endDate } = req.query;
-        
+
         if (!startDate || !endDate) {
             return res.status(400).json({
                 success: false,
@@ -115,9 +160,9 @@ export const getAttendanceSummary = async (req, res) => {
         const summary = await Attendance.aggregate([
             {
                 $match: {
-                    fecha: { 
-                        $gte: new Date(startDate), 
-                        $lte: new Date(endDate) 
+                    fecha: {
+                        $gte: new Date(startDate),
+                        $lte: new Date(endDate)
                     }
                 }
             },
@@ -133,6 +178,7 @@ export const getAttendanceSummary = async (req, res) => {
             success: true,
             summary
         });
+
     } catch (error) {
         console.error('❌ Error al obtener resumen:', error);
         res.status(500).json({

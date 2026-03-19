@@ -7,8 +7,11 @@ const DocenteObservaciones = ({ user }) => {
     const [selectedCurso, setSelectedCurso] = useState('');
     const [selectedEstudiante, setSelectedEstudiante] = useState('');
     const [tipo, setTipo] = useState('');
+    const [nivel, setNivel] = useState('');
     const [descripcion, setDescripcion] = useState('');
     const [planMejora, setPlanMejora] = useState('');
+    const [archivo, setArchivo] = useState(null);
+    const [nombreArchivo, setNombreArchivo] = useState('Ningún archivo seleccionado');
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
@@ -33,35 +36,77 @@ const DocenteObservaciones = ({ user }) => {
         }
     };
 
+    const handleFileChange = (e) => {
+        const file = e.target.files[0];
+        if (file) {
+            // Validar tamaño (5MB máximo)
+            if (file.size > 5 * 1024 * 1024) {
+                alert('❌ El archivo no puede ser mayor a 5MB');
+                e.target.value = '';
+                return;
+            }
+            setArchivo(file);
+            setNombreArchivo(file.name);
+        } else {
+            setArchivo(null);
+            setNombreArchivo('Ningún archivo seleccionado');
+        }
+    };
+
     const handleSubmit = async (e) => {
         e.preventDefault();
+        
+        if (!selectedEstudiante || !tipo || !nivel || !descripcion) {
+            alert('Por favor complete todos los campos obligatorios');
+            return;
+        }
+
         try {
             const token = localStorage.getItem('token');
-            const response = await fetch('http://localhost:5000/api/observations', {
+            
+            // Crear FormData para enviar archivo
+            const formData = new FormData();
+            formData.append('studentId', selectedEstudiante);
+            formData.append('docenteId', user.id);
+            formData.append('tipo', tipo);
+            formData.append('nivel', nivel);
+            formData.append('descripcion', descripcion);
+            formData.append('planMejora', planMejora || '');
+            
+            if (archivo) {
+                formData.append('documento', archivo);
+            }
+
+            // Usar el endpoint con archivo
+            const response = await fetch('http://localhost:5000/api/observations/with-file', {
                 method: 'POST',
                 headers: {
-                    'Content-Type': 'application/json',
                     'Authorization': `Bearer ${token}`
                 },
-                body: JSON.stringify({
-                    studentId: selectedEstudiante,
-                    docenteId: user.id,
-                    tipo,
-                    descripcion,
-                    nivel: 'Leve',
-                    planMejora
-                })
+                body: formData
             });
 
             if (response.ok) {
-                alert('Observación registrada exitosamente');
+                alert('✅ Observación registrada exitosamente');
+                // Resetear formulario
                 setSelectedEstudiante('');
                 setTipo('');
+                setNivel('');
                 setDescripcion('');
                 setPlanMejora('');
+                setArchivo(null);
+                setNombreArchivo('Ningún archivo seleccionado');
+                
+                // Resetear el input file
+                const fileInput = document.getElementById('file-upload');
+                if (fileInput) fileInput.value = '';
+            } else {
+                const error = await response.json();
+                alert(`❌ Error: ${error.message || 'No se pudo registrar la observación'}`);
             }
         } catch (error) {
             console.error('Error:', error);
+            alert('❌ Error de conexión con el servidor');
         }
     };
 
@@ -81,11 +126,14 @@ const DocenteObservaciones = ({ user }) => {
                     
                     {/* Curso */}
                     <div style={styles.formGroup}>
-                        <label style={styles.label}>Curso</label>
+                        <label style={styles.label}>Curso *</label>
                         <select 
                             style={styles.select}
                             value={selectedCurso}
-                            onChange={(e) => setSelectedCurso(e.target.value)}
+                            onChange={(e) => {
+                                setSelectedCurso(e.target.value);
+                                setSelectedEstudiante('');
+                            }}
                             required
                         >
                             <option value="">Seleccione un curso</option>
@@ -97,7 +145,7 @@ const DocenteObservaciones = ({ user }) => {
 
                     {/* Estudiante */}
                     <div style={styles.formGroup}>
-                        <label style={styles.label}>Estudiante</label>
+                        <label style={styles.label}>Estudiante *</label>
                         <select 
                             style={styles.select}
                             value={selectedEstudiante}
@@ -114,28 +162,50 @@ const DocenteObservaciones = ({ user }) => {
                         </select>
                     </div>
 
-                    {/* Tipo de Observación */}
-                    <div style={styles.formGroup}>
-                        <label style={styles.label}>Tipo de Observación</label>
-                        <select 
-                            style={styles.select}
-                            value={tipo}
-                            onChange={(e) => setTipo(e.target.value)}
-                            required
-                        >
-                            <option value="">Seleccione el tipo</option>
-                            <option value="Académica">Académica</option>
-                            <option value="Disciplinaria">Disciplinaria</option>
-                            <option value="General">General</option>
-                        </select>
+                    {/* Fila de dos columnas: Tipo y Nivel */}
+                    <div style={styles.row}>
+                        {/* Tipo de Observación */}
+                        <div style={styles.formGroup}>
+                            <label style={styles.label}>Tipo de Observación *</label>
+                            <select 
+                                style={styles.select}
+                                value={tipo}
+                                onChange={(e) => setTipo(e.target.value)}
+                                required
+                            >
+                                <option value="">Seleccione el tipo</option>
+                                <option value="Académica">📚 Académica</option>
+                                <option value="Disciplinaria">⚠️ Disciplinaria</option>
+                                <option value="General">📋 General</option>
+                            </select>
+                        </div>
+
+                        {/* Nivel de la Falta (SEGÚN MANUAL DE CONVIVENCIA) */}
+                        <div style={styles.formGroup}>
+                            <label style={styles.label}>Tipo de Falta *</label>
+                            <select 
+                                style={styles.select}
+                                value={nivel}
+                                onChange={(e) => setNivel(e.target.value)}
+                                required
+                            >
+                                <option value="">Seleccione el tipo de falta</option>
+                                <option value="Tipo I">🟢 Tipo I (Leve)</option>
+                                <option value="Tipo II">🟡 Tipo II (Grave)</option>
+                                <option value="Tipo III">🔴 Tipo III (Gravísima)</option>
+                            </select>
+                            <small style={styles.helpText}>
+                                Según Manual de Convivencia (Cap. V, Arts. 27-29)
+                            </small>
+                        </div>
                     </div>
 
                     {/* Descripción */}
                     <div style={styles.formGroup}>
-                        <label style={styles.label}>Descripción de la Observación</label>
+                        <label style={styles.label}>Descripción de la Observación *</label>
                         <textarea
                             style={styles.textarea}
-                            rows="8"
+                            rows="6"
                             value={descripcion}
                             onChange={(e) => setDescripcion(e.target.value)}
                             placeholder="Describa detalladamente la observación..."
@@ -145,14 +215,35 @@ const DocenteObservaciones = ({ user }) => {
 
                     {/* Plan de Mejora */}
                     <div style={styles.formGroup}>
-                        <label style={styles.label}>Plan de Mejora</label>
+                        <label style={styles.label}>Plan de Mejora (opcional)</label>
                         <textarea
                             style={styles.textarea}
-                            rows="6"
+                            rows="4"
                             value={planMejora}
                             onChange={(e) => setPlanMejora(e.target.value)}
                             placeholder="Describa el plan de mejora para el estudiante..."
                         />
+                    </div>
+
+                    {/* Documento del Plan de Mejora */}
+                    <div style={styles.formGroup}>
+                        <label style={styles.label}>Documento del Plan de Mejora (Opcional)</label>
+                        <div style={styles.fileInputContainer}>
+                            <input
+                                type="file"
+                                id="file-upload"
+                                onChange={handleFileChange}
+                                style={styles.fileInput}
+                                accept=".pdf,.doc,.docx,.txt,.jpg,.jpeg,.png"
+                            />
+                            <label htmlFor="file-upload" style={styles.fileInputLabel}>
+                                📎 Seleccionar archivo
+                            </label>
+                            <span style={styles.fileName}>{nombreArchivo}</span>
+                        </div>
+                        <small style={styles.helpText}>
+                            Formatos permitidos: PDF, Word, TXT, JPG, PNG (máx. 5MB)
+                        </small>
                     </div>
 
                     {/* Botón */}
@@ -169,7 +260,7 @@ const DocenteObservaciones = ({ user }) => {
 const styles = {
     container: {
         padding: '24px',
-        maxWidth: '900px',
+        maxWidth: '1000px',
         margin: '0 auto'
     },
     pageTitle: {
@@ -200,7 +291,12 @@ const styles = {
     form: {
         display: 'flex',
         flexDirection: 'column',
-        gap: '24px'
+        gap: '20px'
+    },
+    row: {
+        display: 'grid',
+        gridTemplateColumns: '1fr 1fr',
+        gap: '20px'
     },
     formGroup: {
         display: 'flex',
@@ -210,16 +306,16 @@ const styles = {
     label: {
         fontWeight: '600',
         color: '#2c3e50',
-        fontSize: '15px'
+        fontSize: '14px'
     },
     select: {
         width: '100%',
-        padding: '14px',
+        padding: '12px',
         border: '1px solid #dcdfe6',
-        borderRadius: '10px',
-        fontSize: '15px',
+        borderRadius: '8px',
+        fontSize: '14px',
         backgroundColor: 'white',
-        transition: 'all 0.3s',
+        transition: 'all 0.2s',
         ':focus': {
             borderColor: '#27ae60',
             boxShadow: '0 0 0 3px rgba(39,174,96,0.1)',
@@ -228,35 +324,66 @@ const styles = {
     },
     textarea: {
         width: '100%',
-        padding: '16px',
+        padding: '12px',
         border: '1px solid #dcdfe6',
-        borderRadius: '10px',
-        fontSize: '15px',
+        borderRadius: '8px',
+        fontSize: '14px',
         fontFamily: 'inherit',
         resize: 'vertical',
-        lineHeight: '1.6',
-        transition: 'all 0.3s',
+        lineHeight: '1.5',
+        transition: 'all 0.2s',
         ':focus': {
             borderColor: '#27ae60',
             boxShadow: '0 0 0 3px rgba(39,174,96,0.1)',
             outline: 'none'
         }
     },
+    // Estilos para el input de archivo (personalizado)
+    fileInputContainer: {
+        display: 'flex',
+        alignItems: 'center',
+        gap: '12px',
+        flexWrap: 'wrap'
+    },
+    fileInput: {
+        display: 'none' // Ocultamos el input real
+    },
+    fileInputLabel: {
+        padding: '10px 16px',
+        backgroundColor: '#e2e8f0',
+        color: '#2d3748',
+        borderRadius: '6px',
+        fontSize: '14px',
+        fontWeight: '500',
+        cursor: 'pointer',
+        transition: 'all 0.2s',
+        ':hover': {
+            backgroundColor: '#cbd5e0'
+        }
+    },
+    fileName: {
+        fontSize: '14px',
+        color: '#4a5568',
+        fontStyle: 'italic'
+    },
+    helpText: {
+        fontSize: '12px',
+        color: '#7f8c8d',
+        marginTop: '4px'
+    },
     submitButton: {
-        marginTop: '16px',
-        padding: '16px 24px',
+        marginTop: '8px',
+        padding: '14px 24px',
         backgroundColor: '#27ae60',
         color: 'white',
         border: 'none',
-        borderRadius: '10px',
-        fontSize: '17px',
+        borderRadius: '8px',
+        fontSize: '16px',
         fontWeight: '600',
         cursor: 'pointer',
-        transition: 'all 0.3s',
+        transition: 'all 0.2s',
         ':hover': {
             backgroundColor: '#219a52',
-            transform: 'translateY(-2px)',
-            boxShadow: '0 8px 16px rgba(39,174,96,0.2)'
         }
     }
 };

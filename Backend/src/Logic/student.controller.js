@@ -216,15 +216,97 @@ export const getStudentsByTeacher = async (req, res) => {
     }
 };
 
-// Obtener estudiantes por acudiente (por cédula)
+// ===========================================
+// FUNCIÓN ACTUALIZADA PARA ACUDIENTES
+// ===========================================
+
+// Obtener estudiantes por acudiente (por cédula) - VERSIÓN MEJORADA
 export const getStudentsByParent = async (req, res) => {
     try {
         const { cedulaPadre } = req.params;
+        const db = mongoose.connection.db;
 
         console.log('🔍 Buscando estudiantes para acudiente con cédula:', cedulaPadre);
 
+        // 1. Buscar el acudiente en users
+        const acudiente = await db.collection('users').findOne({
+            numeroIdentificacion: cedulaPadre,
+            rol: 'acudiente'
+        });
+
+        if (!acudiente) {
+            console.log('⚠️ Acudiente no encontrado en users, buscando directamente en students...');
+            
+            // Fallback: buscar directamente por cedula_padre en students
+            const estudiantesDirectos = await Student.find({
+                cedula_padre: cedulaPadre
+            });
+
+            if (estudiantesDirectos.length > 0) {
+                console.log(`✅ Encontrados ${estudiantesDirectos.length} estudiantes por búsqueda directa`);
+                return res.json({
+                    success: true,
+                    count: estudiantesDirectos.length,
+                    data: estudiantesDirectos,
+                    source: 'direct'
+                });
+            }
+
+            return res.json({
+                success: true,
+                count: 0,
+                data: [],
+                message: 'Acudiente no encontrado'
+            });
+        }
+
+        console.log('✅ Acudiente encontrado:', acudiente.nombre);
+        console.log('📚 Estudiantes asociados en users:', acudiente.estudiantesAsociados?.length || 0);
+
+        // 2. Obtener los IDs de los estudiantes asociados
+        const estudiantesIds = acudiente.estudiantesAsociados || [];
+
+        if (estudiantesIds.length === 0) {
+            console.log('⚠️ El acudiente no tiene estudiantes asociados en users');
+            
+            // Fallback: buscar directamente por cedula_padre
+            const estudiantesDirectos = await Student.find({
+                cedula_padre: cedulaPadre
+            });
+
+            if (estudiantesDirectos.length > 0) {
+                console.log(`✅ Encontrados ${estudiantesDirectos.length} estudiantes por búsqueda directa`);
+                
+                // Actualizar el acudiente con estos estudiantes
+                await db.collection('users').updateOne(
+                    { _id: acudiente._id },
+                    { 
+                        $set: { 
+                            estudiantesAsociados: estudiantesDirectos.map(e => e._id)
+                        }
+                    }
+                );
+                console.log('🔄 Acudiente actualizado con estudiantes');
+
+                return res.json({
+                    success: true,
+                    count: estudiantesDirectos.length,
+                    data: estudiantesDirectos,
+                    source: 'direct-updated'
+                });
+            }
+
+            return res.json({
+                success: true,
+                count: 0,
+                data: [],
+                message: 'El acudiente no tiene estudiantes asociados'
+            });
+        }
+
+        // 3. Buscar la información completa de los estudiantes
         const estudiantes = await Student.find({
-            cedula_padre: cedulaPadre
+            _id: { $in: estudiantesIds }
         });
 
         console.log(`✅ Encontrados ${estudiantes.length} estudiantes para el acudiente`);
@@ -232,7 +314,8 @@ export const getStudentsByParent = async (req, res) => {
         res.json({
             success: true,
             count: estudiantes.length,
-            data: estudiantes
+            data: estudiantes,
+            source: 'users'
         });
 
     } catch (error) {

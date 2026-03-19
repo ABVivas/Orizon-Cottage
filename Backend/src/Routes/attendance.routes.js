@@ -3,7 +3,8 @@ import express from 'express';
 import {
     registerAttendance,
     getAttendanceByDate,
-    getAttendanceSummary
+    getAttendanceSummary,
+    getAttendanceByStudent
 } from '../Logic/attendance.controller.js';
 import { verifyToken } from '../Middleware/auth.middleware.js';
 
@@ -13,5 +14,6 @@ const router = express.Router();
 router.post('/', verifyToken, registerAttendance);
 router.get('/', verifyToken, getAttendanceByDate);
 router.get('/summary', verifyToken, getAttendanceSummary);
+router.get('/estudiante/:studentId', verifyToken, getAttendanceByStudent);
 
 export default router;
