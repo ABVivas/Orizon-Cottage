@@ -13,8 +13,10 @@ const observationSchema = new mongoose.Schema({
         required: true
     },
     fecha: {
-        type: Date,
-        default: Date.now
+        type: String,
+        default: function() {
+            return new Date().toLocaleDateString('en-CA');
+        }
     },
     descripcion: {
         type: String,
@@ -27,7 +29,7 @@ const observationSchema = new mongoose.Schema({
     },
     nivel: {
         type: String,
-        enum: ["Tipo I", "Tipo II", "Tipo III"], // ✅ AHORA USA LOS VALORES CORRECTOS
+        enum: ["Tipo I", "Tipo II", "Tipo III"],
         required: true
     },
     planMejora: {
@@ -44,7 +46,6 @@ const observationSchema = new mongoose.Schema({
         tipo: String,
         fechaSubida: { type: Date, default: Date.now }
     },
-    // Campo para seguimiento del plan
     seguimiento: [{
         fecha: { type: Date, default: Date.now },
         comentario: String,
@@ -55,7 +56,6 @@ const observationSchema = new mongoose.Schema({
             default: "pendiente"
         }
     }],
-    // Para evidencias/documentos (futuro)
     evidencias: [{
         nombre: String,
         url: String,
@@ -65,7 +65,6 @@ const observationSchema = new mongoose.Schema({
     timestamps: true
 });
 
-// Índices para búsquedas rápidas
 observationSchema.index({ studentId: 1, fecha: -1 });
 observationSchema.index({ docenteId: 1, fecha: -1 });
 observationSchema.index({ nivel: 1 });

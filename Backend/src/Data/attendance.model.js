@@ -1,4 +1,5 @@
 // Backend/src/Data/attendance.model.js
+// Backend/src/Data/attendance.model.js
 import mongoose from 'mongoose';
 
 const attendanceSchema = new mongoose.Schema({
@@ -8,7 +9,7 @@ const attendanceSchema = new mongoose.Schema({
         required: true
     },
     fecha: {
-        type: Date,
+        type: String,
         required: true
     },
     estado: {

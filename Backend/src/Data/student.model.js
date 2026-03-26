@@ -1,4 +1,5 @@
 // backend/src/Data/student.model.js
+// backend/src/Data/student.model.js
 import mongoose from 'mongoose';
 
 const studentSchema = new mongoose.Schema({
@@ -9,6 +10,10 @@ const studentSchema = new mongoose.Schema({
         type: String,
         required: true,
         enum: ['preescolar', 'primaria', 'secundaria']
+    },
+    grado_especifico: {
+        type: String,
+        default: ''
     },
     id_estudiante: {
         type: String,
@@ -23,6 +28,10 @@ const studentSchema = new mongoose.Schema({
     apellido1: {
         type: String,
         required: true
+    },
+    apellido: {
+        type: String,
+        default: ''
     },
     fecha_nacimiento: {
         type: String
@@ -56,7 +65,7 @@ const studentSchema = new mongoose.Schema({
     seguro_estudiantil: { type: String, default: '' }
 }, {
     timestamps: true,
-    collection: 'students' // Especificar el nombre exacto de la colección
+    collection: 'students'
 });
 
 const Student = mongoose.model('Student', studentSchema);

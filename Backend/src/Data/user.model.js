@@ -25,6 +25,11 @@ const userSchema = new mongoose.Schema({
         trim: true,
         default: null
     },
+    // NUEVO CAMPO: Teléfono
+    telefono: {
+        type: String,
+        default: ''
+    },
     password: {
         type: String,
         required: true

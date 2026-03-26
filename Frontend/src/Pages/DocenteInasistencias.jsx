@@ -18,8 +18,8 @@ const DocenteInasistencias = ({ user }) => {
         observacion: ''
     });
 
-    // Obtener fecha actual en formato YYYY-MM-DD
-    const today = new Date().toISOString().split('T')[0];
+    // Obtener fecha actual en formato YYYY-MM-DD (CORREGIDO para zona horaria)
+    const today = new Date().toLocaleDateString('en-CA');
 
     useEffect(() => {
         if (user?.id) {
@@ -42,7 +42,6 @@ const DocenteInasistencias = ({ user }) => {
             const data = await response.json();
             
             if (data.success) {
-                // Obtener cursos únicos
                 const uniqueCursos = [...new Set(data.data.map(e => e.grado_especifico))];
                 setCursos(uniqueCursos);
                 setEstudiantes(data.data);
@@ -81,10 +80,8 @@ const DocenteInasistencias = ({ user }) => {
 
     const handleAttendanceClick = (student, estado) => {
         if (estado === 'presente') {
-            // Presente no necesita motivo
             registerAttendance(student._id, estado, '', '');
         } else {
-            // Ausente o Tardanza necesitan motivo
             setCurrentStudent(student);
             setCurrentEstado(estado);
             setMotivoData({ motivo: 'enfermedad', observacion: '' });
@@ -151,15 +148,6 @@ const DocenteInasistencias = ({ user }) => {
                 return { bg: '#f39c12', text: 'Tardanza' };
             default:
                 return { bg: '#95a5a6', text: 'Sin registrar' };
-        }
-    };
-
-    const getEstadoTexto = (estado) => {
-        switch(estado) {
-            case 'presente': return 'Llegó puntual';
-            case 'tarde': return 'Llegó 15 min tarde';
-            case 'ausente': return 'Ausente';
-            default: return '';
         }
     };
 
@@ -261,7 +249,6 @@ const DocenteInasistencias = ({ user }) => {
                     <div style={styles.studentList}>
                         {estudiantesFiltrados.map(est => {
                             const estadoActual = getStudentAttendance(est._id);
-                            const estadoInfo = getEstadoBadge(estadoActual);
                             const record = asistenciasHoy.find(a => a.studentId?._id === est._id || a.studentId === est._id);
                             const motivoTexto = record?.motivo ? motivoMap[record.motivo] : '';
                             

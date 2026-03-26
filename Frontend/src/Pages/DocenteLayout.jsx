@@ -5,6 +5,7 @@ const DocenteLayout = ({ user, onLogout, activeSection, setActiveSection, childr
 
     const [menuOpen, setMenuOpen] = useState(false);
     const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
+    const [menuItems, setMenuItems] = useState([]);
 
     useEffect(() => {
         const handleResize = () => {
@@ -20,13 +21,49 @@ const DocenteLayout = ({ user, onLogout, activeSection, setActiveSection, childr
         return () => window.removeEventListener("resize", handleResize);
     }, []);
 
-    const menuItems = [
-        { id: "dashboard", label: "Dashboard", icon: "📊" },
-        { id: "inasistencias", label: "Registro de Inasistencias", icon: "📋" },
-        { id: "observaciones", label: "Registro de Observaciones", icon: "📝" },
-        { id: "historial", label: "Historial", icon: "📚" },
-        { id: "mensajeria", label: "Mensajería", icon: "💬" }
-    ];
+    // Cargar configuración y filtrar menú
+    useEffect(() => {
+        const loadSettings = () => {
+            const savedSettings = localStorage.getItem('adminSettings');
+            let settings = { enableAttendance: true, enableObservations: true, enableMessaging: true };
+            
+            if (savedSettings) {
+                try {
+                    settings = JSON.parse(savedSettings);
+                } catch (e) {
+                    console.error('Error parsing settings:', e);
+                }
+            }
+            
+            const allItems = [
+                { id: "dashboard", label: "Dashboard", icon: "📊" },
+                { id: "inasistencias", label: "Registro de Inasistencias", icon: "📋" },
+                { id: "observaciones", label: "Registro de Observaciones", icon: "📝" },
+                { id: "historial", label: "Historial", icon: "📚" },
+                { id: "mensajeria", label: "Mensajería", icon: "💬" }
+            ];
+            
+            // Filtrar según configuración
+            const filtered = allItems.filter(item => {
+                if (item.id === "inasistencias") return settings.enableAttendance;
+                if (item.id === "observaciones") return settings.enableObservations;
+                if (item.id === "mensajeria") return settings.enableMessaging;
+                return true; // dashboard e historial siempre visibles
+            });
+            
+            setMenuItems(filtered);
+        };
+        
+        loadSettings();
+        
+        // Escuchar cambios en localStorage
+        const handleStorageChange = () => {
+            loadSettings();
+        };
+        
+        window.addEventListener('storage', handleStorageChange);
+        return () => window.removeEventListener('storage', handleStorageChange);
+    }, []);
 
     return (
         <div style={styles.container}>

@@ -1,9 +1,11 @@
 // Backend/src/Routes/user.routes.js
+// Backend/src/Routes/user.routes.js
 import express from 'express';
 import User from '../Data/user.model.js';
 import Student from '../Data/student.model.js';
 import { verifyToken, isDirectivo } from '../Middleware/auth.middleware.js';
 import bcrypt from 'bcryptjs';
+import mongoose from 'mongoose';
 
 const router = express.Router();
 
@@ -30,7 +32,6 @@ router.get('/', verifyToken, isDirectivo, async (req, res) => {
 // ===========================================
 router.get('/stats', verifyToken, async (req, res) => {
     try {
-        // Solo admin puede ver estadísticas
         if (req.user.rol !== 'admin') {
             return res.status(403).json({
                 success: false,
@@ -38,10 +39,7 @@ router.get('/stats', verifyToken, async (req, res) => {
             });
         }
 
-        // Obtener todos los usuarios
         const users = await User.find();
-        
-        // Obtener todos los estudiantes
         const students = await Student.find();
         
         const stats = {
@@ -71,16 +69,23 @@ router.get('/stats', verifyToken, async (req, res) => {
 });
 
 // ===========================================
-// OBTENER DESTINATARIOS PARA MENSAJERÍA (acudientes)
+// OBTENER DESTINATARIOS PARA MENSAJERÍA (directivo puede ver todos)
 // ===========================================
 router.get('/destinatarios', verifyToken, async (req, res) => {
     try {
+        let rolFilter = ['docente', 'directivo'];
+        
+        // Si el usuario es directivo o admin, también puede enviar a acudientes
+        if (req.user.rol === 'directivo' || req.user.rol === 'admin') {
+            rolFilter = ['docente', 'directivo', 'acudiente'];
+        }
+        
         const users = await User.find({
-            rol: { $in: ['docente', 'directivo'] },
+            rol: { $in: rolFilter },
             activo: true
         }).select('nombre rol _id');
         
-        console.log(`📨 Enviando ${users.length} destinatarios disponibles`);
+        console.log(`📨 Enviando ${users.length} destinatarios disponibles para ${req.user.rol}`);
         
         res.json({
             success: true,
@@ -170,11 +175,21 @@ router.get('/profile', verifyToken, async (req, res) => {
 router.put('/profile', verifyToken, async (req, res) => {
     try {
         const { nombre, email, telefono } = req.body;
+        
+        console.log('📝 Actualizando perfil:', { nombre, email, telefono });
+        
+        const updateData = {};
+        if (nombre !== undefined) updateData.nombre = nombre;
+        if (email !== undefined) updateData.email = email;
+        if (telefono !== undefined) updateData.telefono = telefono;
+        
         const user = await User.findByIdAndUpdate(
             req.user.id,
-            { nombre, email, telefono },
+            { $set: updateData },
             { new: true }
         ).select('-password');
+        
+        console.log('✅ Perfil actualizado:', user._id);
         
         res.json({
             success: true,
@@ -182,6 +197,61 @@ router.put('/profile', verifyToken, async (req, res) => {
         });
     } catch (error) {
         console.error('❌ Error al actualizar perfil:', error);
+        res.status(500).json({
+            success: false,
+            message: error.message
+        });
+    }
+});
+
+// ===========================================
+// ACTUALIZAR USUARIO POR ID (admin/directivo)
+// ===========================================
+router.put('/:id', verifyToken, isDirectivo, async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { nombre, email, telefono, activo, cursosAsignados, rol } = req.body;
+        
+        if (!mongoose.Types.ObjectId.isValid(id)) {
+            return res.status(400).json({
+                success: false,
+                message: 'ID de usuario inválido'
+            });
+        }
+        
+        const updateData = {};
+        if (nombre !== undefined) updateData.nombre = nombre;
+        if (email !== undefined) updateData.email = email;
+        if (telefono !== undefined) updateData.telefono = telefono;
+        if (activo !== undefined) updateData.activo = activo;
+        if (cursosAsignados !== undefined) updateData.cursosAsignados = cursosAsignados;
+        if (rol !== undefined && req.user.rol === 'admin') updateData.rol = rol;
+        
+        console.log('📝 Actualizando usuario ID:', id);
+        console.log('📝 Datos a actualizar:', updateData);
+        
+        const updatedUser = await User.findByIdAndUpdate(
+            id,
+            { $set: updateData },
+            { new: true, runValidators: true }
+        ).select('-password');
+        
+        if (!updatedUser) {
+            return res.status(404).json({
+                success: false,
+                message: 'Usuario no encontrado'
+            });
+        }
+        
+        console.log('✅ Usuario actualizado:', updatedUser._id);
+        
+        res.json({
+            success: true,
+            user: updatedUser
+        });
+        
+    } catch (error) {
+        console.error('❌ Error al actualizar usuario:', error);
         res.status(500).json({
             success: false,
             message: error.message

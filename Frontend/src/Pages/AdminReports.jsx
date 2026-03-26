@@ -1,160 +1,559 @@
 // Frontend/src/Pages/AdminReports.jsx
 import { useState, useEffect } from 'react';
+import * as XLSX from 'xlsx';
+import jsPDF from 'jspdf';
+import 'jspdf-autotable';
 
 const AdminReports = () => {
-    const [reports, setReports] = useState([]);
+    const [reportType, setReportType] = useState('asistencia');
+    const [period, setPeriod] = useState('mes');
+    const [startDate, setStartDate] = useState(new Date().toISOString().split('T')[0]);
+    const [endDate, setEndDate] = useState(new Date().toISOString().split('T')[0]);
+    const [selectedCourse, setSelectedCourse] = useState('todos');
+    const [allAttendance, setAllAttendance] = useState([]);
+    const [allObservations, setAllObservations] = useState([]);
+    const [showPreview, setShowPreview] = useState(false);
     const [loading, setLoading] = useState(false);
-    const [reportType, setReportType] = useState('general');
-    const [selectedGrado, setSelectedGrado] = useState('todos');
-    const [dateRange, setDateRange] = useState({
-        startDate: new Date(new Date().setDate(1)).toISOString().split('T')[0],
-        endDate: new Date().toISOString().split('T')[0]
-    });
-    const [summary, setSummary] = useState({ total: 0, tipoI: 0, tipoII: 0, tipoIII: 0, academicas: 0, disciplinarias: 0 });
+    const [recentReports, setRecentReports] = useState([]);
 
-    const grados = ['todos', '0°', '1°', '2°', '3°', '4°', '5°', '6°', '7°', '8°', '9°', '10°', '11°'];
+    const availableCourses = ['0°', '1°', '2°', '3°', '4°', '5°', '6°', '7°', '8°', '9°', '10°', '11°'];
 
-    useEffect(() => { fetchReports(); }, [dateRange, reportType, selectedGrado]);
+    useEffect(() => {
+        const savedReports = localStorage.getItem('recentReports');
+        if (savedReports) {
+            setRecentReports(JSON.parse(savedReports));
+        }
+    }, []);
 
-    const fetchReports = async () => {
-        setLoading(true);
+    useEffect(() => {
+        const today = new Date();
+        const todayStr = today.toISOString().split('T')[0];
+        const yesterday = new Date(today);
+        yesterday.setDate(today.getDate() - 1);
+        const weekAgo = new Date(today);
+        weekAgo.setDate(today.getDate() - 7);
+        const monthAgo = new Date(today);
+        monthAgo.setMonth(today.getMonth() - 1);
+
+        switch(period) {
+            case 'hoy':
+                setStartDate(todayStr);
+                setEndDate(todayStr);
+                break;
+            case 'ayer':
+                setStartDate(yesterday.toISOString().split('T')[0]);
+                setEndDate(yesterday.toISOString().split('T')[0]);
+                break;
+            case 'semana':
+                setStartDate(weekAgo.toISOString().split('T')[0]);
+                setEndDate(todayStr);
+                break;
+            case 'mes':
+                setStartDate(monthAgo.toISOString().split('T')[0]);
+                setEndDate(todayStr);
+                break;
+            default:
+                break;
+        }
+    }, [period]);
+
+    const fetchAttendanceData = async () => {
         try {
             const token = localStorage.getItem('token');
-            let url = `http://localhost:5000/api/observations?startDate=${dateRange.startDate}&endDate=${dateRange.endDate}`;
-            if (reportType !== 'general') url += `&tipo=${reportType === 'academica' ? 'Académica' : 'Disciplinaria'}`;
-            if (selectedGrado !== 'todos') url += `&grado=${selectedGrado}`;
-            const response = await fetch(url, { headers: { 'Authorization': `Bearer ${token}` } });
-            const data = await response.json();
-            if (data.success) {
-                const observations = data.data || [];
-                setReports(observations);
-                setSummary({
-                    total: observations.length,
-                    tipoI: observations.filter(o => o.nivel === 'Tipo I').length,
-                    tipoII: observations.filter(o => o.nivel === 'Tipo II').length,
-                    tipoIII: observations.filter(o => o.nivel === 'Tipo III').length,
-                    academicas: observations.filter(o => o.tipo === 'Académica').length,
-                    disciplinarias: observations.filter(o => o.tipo === 'Disciplinaria').length
-                });
+            
+            // Usar el nuevo endpoint con rango de fechas
+            const attendanceRes = await fetch(
+                `http://localhost:5000/api/attendance/report-range?startDate=${startDate}&endDate=${endDate}`,
+                {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                }
+            );
+            const attendanceData = await attendanceRes.json();
+            
+            if (attendanceData.success) {
+                console.log('📊 Asistencias recibidas:', attendanceData.attendance?.length || 0);
+                if (attendanceData.attendance?.length > 0) {
+                    console.log('📝 Ejemplo de asistencia:', attendanceData.attendance[0]);
+                }
+                return attendanceData.attendance || [];
             }
-        } catch (error) { console.error('Error:', error); }
-        finally { setLoading(false); }
+            return [];
+        } catch (error) {
+            console.error('Error fetching attendance:', error);
+            return [];
+        }
     };
 
-    const exportToPDF = () => {
-        const printWindow = window.open('', '_blank');
-        const fecha = new Date().toLocaleDateString('es-ES');
-        let htmlContent = `
-            <!DOCTYPE html><html><head><title>Reporte de Convivencia - Orizon Cottage</title>
-            <style>body{font-family:Arial;margin:40px}h1{color:#27ae60;text-align:center}h2{color:#2c3e50;border-bottom:2px solid #27ae60;padding-bottom:10px}
-            table{width:100%;border-collapse:collapse;margin-top:20px}th,td{border:1px solid #ddd;padding:8px;text-align:left}th{background-color:#27ae60;color:white}
-            .summary{display:flex;gap:20px;margin:20px 0;flex-wrap:wrap}.card{background:#f5f5f5;padding:15px;border-radius:8px;text-align:center;flex:1;min-width:100px}
-            .card-value{font-size:24px;font-weight:bold;color:#27ae60}.footer{margin-top:30px;text-align:center;font-size:12px;color:#7f8c8d}</style></head><body>
-            <h1>ORIZON COTTAGE</h1><h2>Reporte de Convivencia Escolar</h2>
-            <p>Período: ${dateRange.startDate} al ${dateRange.endDate}</p><p>Fecha de generación: ${fecha}</p>
-            <div class="summary"><div class="card"><div class="card-value">${summary.total}</div><div>Total Observaciones</div></div>
-            <div class="card"><div class="card-value">${summary.tipoI}</div><div>Tipo I (Leve)</div></div>
-            <div class="card"><div class="card-value">${summary.tipoII}</div><div>Tipo II (Grave)</div></div>
-            <div class="card"><div class="card-value">${summary.tipoIII}</div><div>Tipo III (Gravísima)</div></div>
-            <div class="card"><div class="card-value">${summary.academicas}</div><div>Académicas</div></div>
-            <div class="card"><div class="card-value">${summary.disciplinarias}</div><div>Disciplinarias</div></div></div>
-            <table><thead><tr><th>Fecha</th><th>Estudiante</th><th>Grado</th><th>Tipo</th><th>Nivel</th><th>Descripción</th><th>Docente</th></tr></thead><tbody>`;
-        reports.forEach(obs => {
-            htmlContent += `<tr><td>${new Date(obs.fecha).toLocaleDateString()}</td><td>${obs.studentId?.apellido1 || obs.studentId?.apellido || 'N/A'}</td>
-            <td>${obs.studentId?.grado_especifico || 'N/A'}</td><td>${obs.tipo || 'N/A'}</td><td>${obs.nivel || 'N/A'}</td>
-            <td>${obs.descripcion?.substring(0, 100) || 'N/A'}</td><td>${obs.docenteId?.nombre || 'N/A'}</td></tr>`;
+    const fetchObservationsData = async () => {
+        try {
+            const token = localStorage.getItem('token');
+            
+            // Obtener observaciones con rango de fechas
+            const observationsRes = await fetch(
+                `http://localhost:5000/api/observations?startDate=${startDate}&endDate=${endDate}&limit=1000`,
+                {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                }
+            );
+            const observationsData = await observationsRes.json();
+            
+            if (observationsData.success) {
+                console.log('📝 Observaciones recibidas:', observationsData.data?.length || 0);
+                return observationsData.data || [];
+            }
+            return [];
+        } catch (error) {
+            console.error('Error fetching observations:', error);
+            return [];
+        }
+    };
+
+    const fetchAllData = async () => {
+        setLoading(true);
+        try {
+            // Cargar asistencias y observaciones en paralelo
+            const [attendance, observations] = await Promise.all([
+                fetchAttendanceData(),
+                fetchObservationsData()
+            ]);
+            
+            setAllAttendance(attendance);
+            setAllObservations(observations);
+            
+            console.log('✅ Datos cargados:', {
+                asistencias: attendance.length,
+                observaciones: observations.length
+            });
+            
+        } catch (error) {
+            console.error('Error fetching data:', error);
+            alert('Error al cargar los datos');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    // Función auxiliar para obtener información del estudiante de manera segura
+    const getStudentInfo = (record) => {
+        if (!record.studentId) {
+            return { nombre: 'N/A', grado: 'N/A', _id: null };
+        }
+        
+        // Caso 1: Es un objeto con datos del estudiante (poblado)
+        if (typeof record.studentId === 'object' && record.studentId !== null) {
+            if (record.studentId.apellido1 || record.studentId.apellido) {
+                return {
+                    nombre: record.studentId.apellido1 || record.studentId.apellido || 'N/A',
+                    grado: record.studentId.grado_especifico || record.studentId.grado || 'N/A',
+                    _id: record.studentId._id
+                };
+            }
+            // Es un objeto pero solo tiene _id
+            return {
+                nombre: 'Estudiante ID: ' + (record.studentId._id?.toString().slice(-6) || '?'),
+                grado: 'N/A',
+                _id: record.studentId._id
+            };
+        }
+        
+        // Caso 2: Es un string (ObjectId)
+        if (typeof record.studentId === 'string') {
+            return {
+                nombre: 'Estudiante ID: ' + record.studentId.slice(-6),
+                grado: 'N/A',
+                _id: record.studentId
+            };
+        }
+        
+        return { nombre: 'N/A', grado: 'N/A', _id: null };
+    };
+
+    const getFilteredData = () => {
+        console.log('🔍 Generando reporte - Tipo:', reportType);
+        console.log('📅 Rango de fechas:', startDate, 'a', endDate);
+        
+        // Mapeo de motivos
+        const motivoMap = {
+            'enfermedad': 'Enfermedad',
+            'permiso': 'Permiso',
+            'sin_justificar': 'Sin justificar',
+            'otro': 'Otro'
+        };
+        
+        const estadoMap = {
+            'presente': 'Presente',
+            'ausente': 'Ausente',
+            'tarde': 'Tardanza'
+        };
+        
+        if (reportType === 'asistencia') {
+            let filtered = [...allAttendance];
+            
+            console.log('📊 Total asistencias en BD:', filtered.length);
+            
+            // Filtrar por curso si es necesario
+            if (selectedCourse !== 'todos') {
+                filtered = filtered.filter(record => {
+                    const studentInfo = getStudentInfo(record);
+                    return studentInfo.grado === selectedCourse;
+                });
+                console.log('📊 Asistencias filtradas por curso:', filtered.length);
+            }
+            
+            const mappedData = filtered.map(record => {
+                const studentInfo = getStudentInfo(record);
+                return {
+                    fecha: record.fecha ? new Date(record.fecha).toLocaleDateString() : 'N/A',
+                    estudiante: studentInfo.nombre,
+                    grado: studentInfo.grado,
+                    estado: estadoMap[record.estado] || record.estado || 'Sin registrar',
+                    motivo: motivoMap[record.motivo] || record.motivo || '-',
+                    observaciones: record.observacion || '-',
+                    registradoPor: record.registradoPor || '-'
+                };
+            });
+            
+            console.log('📊 Datos finales para reporte de asistencia:', mappedData.length);
+            return mappedData;
+        }
+        else if (reportType === 'observaciones') {
+            let filtered = [...allObservations];
+            
+            console.log('📝 Total observaciones en BD:', filtered.length);
+            
+            // Filtrar por curso si es necesario
+            if (selectedCourse !== 'todos') {
+                filtered = filtered.filter(record => {
+                    const studentInfo = getStudentInfo(record);
+                    return studentInfo.grado === selectedCourse;
+                });
+                console.log('📝 Observaciones filtradas por curso:', filtered.length);
+            }
+            
+            const mappedData = filtered.map(record => {
+                const studentInfo = getStudentInfo(record);
+                return {
+                    fecha: record.fecha ? new Date(record.fecha).toLocaleDateString() : 'N/A',
+                    estudiante: studentInfo.nombre,
+                    grado: studentInfo.grado,
+                    tipo: record.tipo || '-',
+                    nivel: record.nivel || '-',
+                    descripcion: record.descripcion || '-',
+                    planMejora: record.planMejora || '-'
+                };
+            });
+            
+            console.log('📝 Datos finales para reporte de observaciones:', mappedData.length);
+            return mappedData;
+        }
+        else {
+            // Reporte general
+            const attendanceMapped = allAttendance.map(record => {
+                const studentInfo = getStudentInfo(record);
+                return {
+                    tipo: 'Asistencia',
+                    fecha: record.fecha ? new Date(record.fecha).toLocaleDateString() : 'N/A',
+                    estudiante: studentInfo.nombre,
+                    grado: studentInfo.grado,
+                    detalle: estadoMap[record.estado] || record.estado || 'Sin registrar',
+                    observaciones: record.observacion || '-'
+                };
+            });
+            
+            const observationsMapped = allObservations.map(record => {
+                const studentInfo = getStudentInfo(record);
+                return {
+                    tipo: 'Observación',
+                    fecha: record.fecha ? new Date(record.fecha).toLocaleDateString() : 'N/A',
+                    estudiante: studentInfo.nombre,
+                    grado: studentInfo.grado,
+                    detalle: `${record.tipo || 'General'} - ${record.nivel || 'N/A'}`,
+                    observaciones: record.descripcion || '-'
+                };
+            });
+            
+            const combined = [...attendanceMapped, ...observationsMapped];
+            combined.sort((a, b) => new Date(b.fecha) - new Date(a.fecha));
+            
+            // Filtrar por curso si es necesario
+            let filtered = combined;
+            if (selectedCourse !== 'todos') {
+                filtered = filtered.filter(item => item.grado === selectedCourse);
+            }
+            
+            console.log('📊 Datos finales para reporte general:', filtered.length);
+            return filtered;
+        }
+    };
+
+    const handlePreview = async () => {
+        await fetchAllData();
+        setShowPreview(true);
+    };
+
+    const handleDownloadExcel = async () => {
+        await fetchAllData();
+        const reportData = getFilteredData();
+        
+        if (reportData.length === 0) {
+            alert('No hay datos para generar el reporte en el rango de fechas seleccionado');
+            return;
+        }
+        
+        const ws = XLSX.utils.json_to_sheet(reportData);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, 'Reporte');
+        
+        const fileName = `${reportType}_${startDate}_${endDate}_${selectedCourse}.xlsx`;
+        XLSX.writeFile(wb, fileName);
+        
+        saveRecentReport(`${reportType === 'asistencia' ? 'Asistencia' : reportType === 'observaciones' ? 'Observaciones' : 'General'} - ${startDate} al ${endDate}`, 'Excel');
+    };
+
+    const handleDownloadPDF = async () => {
+        await fetchAllData();
+        const reportData = getFilteredData();
+        
+        if (reportData.length === 0) {
+            alert('No hay datos para generar el reporte en el rango de fechas seleccionado');
+            return;
+        }
+        
+        const doc = new jsPDF();
+        const title = `Reporte de ${reportType === 'asistencia' ? 'Asistencia' : reportType === 'observaciones' ? 'Observaciones' : 'General'}`;
+        
+        doc.setFontSize(16);
+        doc.text(title, 14, 15);
+        doc.setFontSize(10);
+        doc.text(`Período: ${startDate} al ${endDate}`, 14, 25);
+        doc.text(`Curso: ${selectedCourse === 'todos' ? 'Todos los cursos' : selectedCourse}`, 14, 32);
+        doc.text(`Generado: ${new Date().toLocaleString()}`, 14, 39);
+        
+        const columns = Object.keys(reportData[0]);
+        const rows = reportData.map(item => columns.map(col => item[col]));
+        
+        doc.autoTable({
+            head: [columns],
+            body: rows,
+            startY: 45,
+            theme: 'grid',
+            styles: { fontSize: 8 },
+            headStyles: { fillColor: [39, 174, 96] }
         });
-        htmlContent += `</tbody></table><div class="footer">Reporte generado por Orizon Cottage - Sistema de Gestión de Convivencia</div></body></html>`;
-        printWindow.document.write(htmlContent);
-        printWindow.document.close();
-        printWindow.print();
+        
+        const fileName = `${reportType}_${startDate}_${endDate}_${selectedCourse}.pdf`;
+        doc.save(fileName);
+        
+        saveRecentReport(`${reportType === 'asistencia' ? 'Asistencia' : reportType === 'observaciones' ? 'Observaciones' : 'General'} - ${startDate} al ${endDate}`, 'PDF');
     };
 
-    const exportToExcel = () => {
-        const headers = ['Fecha', 'Estudiante', 'Grado', 'Tipo', 'Nivel', 'Descripción', 'Docente'];
-        const rows = reports.map(obs => [
-            new Date(obs.fecha).toLocaleDateString(),
-            obs.studentId?.apellido1 || obs.studentId?.apellido || 'N/A',
-            obs.studentId?.grado_especifico || 'N/A',
-            obs.tipo || 'N/A',
-            obs.nivel || 'N/A',
-            obs.descripcion?.replace(/,/g, ';') || 'N/A',
-            obs.docenteId?.nombre || 'N/A'
-        ]);
-        const csvContent = [headers, ...rows].map(row => row.join(',')).join('\n');
-        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-        const link = document.createElement('a');
-        const url = URL.createObjectURL(blob);
-        link.setAttribute('href', url);
-        link.setAttribute('download', `reporte_convivencia_${new Date().toISOString().split('T')[0]}.csv`);
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        URL.revokeObjectURL(url);
+    const saveRecentReport = (name, format) => {
+        const newReport = {
+            id: Date.now(),
+            name: name,
+            format: format,
+            date: new Date().toISOString(),
+            type: reportType,
+            startDate: startDate,
+            endDate: endDate,
+            course: selectedCourse
+        };
+        
+        const updatedReports = [newReport, ...recentReports].slice(0, 10);
+        setRecentReports(updatedReports);
+        localStorage.setItem('recentReports', JSON.stringify(updatedReports));
     };
 
-    const formatDate = (dateString) => dateString ? new Date(dateString).toLocaleDateString('es-ES') : 'N/A';
-    const getNivelColor = (nivel) => {
-        switch(nivel) { case 'Tipo I': return '#27ae60'; case 'Tipo II': return '#f39c12'; case 'Tipo III': return '#e74c3c'; default: return '#95a5a6'; }
-    };
+    const reportData = getFilteredData();
 
     return (
-        <div>
-            <div style={styles.header}><h2 style={styles.title}>Reportes de Convivencia</h2>
-                <div style={styles.headerButtons}><button onClick={exportToPDF} style={styles.pdfButton}>📄 PDF</button><button onClick={exportToExcel} style={styles.excelButton}>📊 Excel</button></div>
+        <div style={styles.container}>
+            <h2 style={styles.title}>Generación de Reportes</h2>
+            <p style={styles.subtitle}>Genere reportes en PDF y Excel</p>
+            
+            <div style={styles.formContainer}>
+                <h3 style={styles.sectionTitle}>Configuración de Reporte</h3>
+                
+                <div style={styles.formGroup}>
+                    <label style={styles.label}>Tipo de Reporte</label>
+                    <select
+                        value={reportType}
+                        onChange={(e) => setReportType(e.target.value)}
+                        style={styles.select}
+                    >
+                        <option value="asistencia">Reporte de Asistencia</option>
+                        <option value="observaciones">Reporte de Observaciones</option>
+                        <option value="general">Reporte General (Asistencia + Observaciones)</option>
+                    </select>
+                </div>
+                
+                <div style={styles.formGroup}>
+                    <label style={styles.label}>Período</label>
+                    <select
+                        value={period}
+                        onChange={(e) => setPeriod(e.target.value)}
+                        style={styles.select}
+                    >
+                        <option value="hoy">Hoy</option>
+                        <option value="ayer">Ayer</option>
+                        <option value="semana">Última semana</option>
+                        <option value="mes">Último mes</option>
+                        <option value="otro">Otro (personalizado)</option>
+                    </select>
+                </div>
+                
+                <div style={styles.dateRange}>
+                    <div style={styles.formGroup}>
+                        <label style={styles.label}>Fecha de Inicio</label>
+                        <input
+                            type="date"
+                            value={startDate}
+                            onChange={(e) => setStartDate(e.target.value)}
+                            style={styles.dateInput}
+                        />
+                    </div>
+                    <div style={styles.formGroup}>
+                        <label style={styles.label}>Fecha de Fin</label>
+                        <input
+                            type="date"
+                            value={endDate}
+                            onChange={(e) => setEndDate(e.target.value)}
+                            style={styles.dateInput}
+                        />
+                    </div>
+                </div>
+                
+                <div style={styles.formGroup}>
+                    <label style={styles.label}>Cursos (Opcional)</label>
+                    <select
+                        value={selectedCourse}
+                        onChange={(e) => setSelectedCourse(e.target.value)}
+                        style={styles.select}
+                    >
+                        <option value="todos">Todos los cursos</option>
+                        {availableCourses.map(course => (
+                            <option key={course} value={course}>{course}</option>
+                        ))}
+                    </select>
+                </div>
+                
+                <div style={styles.buttonGroup}>
+                    <button onClick={handlePreview} style={styles.previewButton} disabled={loading}>
+                        {loading ? 'Cargando...' : '👁️ Vista Previa'}
+                    </button>
+                    <button onClick={handleDownloadPDF} style={styles.pdfButton} disabled={loading}>
+                        {loading ? 'Cargando...' : '📄 Descargar PDF'}
+                    </button>
+                    <button onClick={handleDownloadExcel} style={styles.excelButton} disabled={loading}>
+                        {loading ? 'Cargando...' : '📊 Descargar Excel'}
+                    </button>
+                </div>
             </div>
-            <div style={styles.filters}>
-                <div style={styles.filterGroup}><label style={styles.filterLabel}>Tipo de Reporte:</label><select value={reportType} onChange={(e) => setReportType(e.target.value)} style={styles.select}>
-                    <option value="general">General</option><option value="academica">Académicas</option><option value="disciplinaria">Disciplinarias</option>
-                </select></div>
-                <div style={styles.filterGroup}><label style={styles.filterLabel}>Grado:</label><select value={selectedGrado} onChange={(e) => setSelectedGrado(e.target.value)} style={styles.select}>
-                    {grados.map(g => <option key={g} value={g}>{g === 'todos' ? 'Todos los grados' : g}</option>)}
-                </select></div>
-                <div style={styles.filterGroup}><label style={styles.filterLabel}>Fecha Inicio:</label><input type="date" value={dateRange.startDate} onChange={(e) => setDateRange({...dateRange, startDate: e.target.value})} style={styles.dateInput} /></div>
-                <div style={styles.filterGroup}><label style={styles.filterLabel}>Fecha Fin:</label><input type="date" value={dateRange.endDate} onChange={(e) => setDateRange({...dateRange, endDate: e.target.value})} style={styles.dateInput} /></div>
-                <button onClick={fetchReports} style={styles.generateButton}>Generar Reporte</button>
-            </div>
-            <div style={styles.statsGrid}>
-                <div style={styles.statCard}><span style={styles.statValue}>{summary.total}</span><span style={styles.statLabel}>Total Observaciones</span></div>
-                <div style={{...styles.statCard, backgroundColor: '#27ae60'}}><span style={styles.statValue}>{summary.tipoI}</span><span style={styles.statLabel}>Tipo I (Leve)</span></div>
-                <div style={{...styles.statCard, backgroundColor: '#f39c12'}}><span style={styles.statValue}>{summary.tipoII}</span><span style={styles.statLabel}>Tipo II (Grave)</span></div>
-                <div style={{...styles.statCard, backgroundColor: '#e74c3c'}}><span style={styles.statValue}>{summary.tipoIII}</span><span style={styles.statLabel}>Tipo III (Gravísima)</span></div>
-                <div style={{...styles.statCard, backgroundColor: '#3498db'}}><span style={styles.statValue}>{summary.academicas}</span><span style={styles.statLabel}>Académicas</span></div>
-                <div style={{...styles.statCard, backgroundColor: '#9b59b6'}}><span style={styles.statValue}>{summary.disciplinarias}</span><span style={styles.statLabel}>Disciplinarias</span></div>
-            </div>
-            {loading ? <p>Cargando reportes...</p> : <div style={styles.tableContainer}><table style={styles.table}><thead><tr style={styles.tableHeader}><th style={styles.th}>Fecha</th><th style={styles.th}>Estudiante</th><th style={styles.th}>Grado</th><th style={styles.th}>Tipo</th><th style={styles.th}>Nivel</th><th style={styles.th}>Descripción</th><th style={styles.th}>Docente</th></tr></thead>
-            <tbody>{reports.length > 0 ? reports.map(r => <tr key={r._id} style={styles.tr}><td style={styles.td}>{formatDate(r.fecha)}</td><td style={styles.td}>{r.studentId?.apellido1 || r.studentId?.apellido || 'N/A'}</td>
-            <td style={styles.td}>{r.studentId?.grado_especifico || 'N/A'}</td><td style={styles.td}>{r.tipo || 'N/A'}</td>
-            <td style={styles.td}><span style={{...styles.nivelBadge, backgroundColor: getNivelColor(r.nivel)}}>{r.nivel || 'N/A'}</span></td>
-            <td style={styles.td}>{r.descripcion?.substring(0, 80)}...</td><td style={styles.td}>{r.docenteId?.nombre || 'N/A'}</td></tr>) : <tr><td colSpan="7" style={styles.emptyMessage}>No hay observaciones en el período seleccionado</td></tr>}</tbody></table></div>}
+            
+            {showPreview && (
+                <div style={styles.previewContainer}>
+                    <h3 style={styles.sectionTitle}>Vista Previa del Reporte</h3>
+                    {loading ? (
+                        <p>Cargando datos...</p>
+                    ) : reportData.length === 0 ? (
+                        <p style={styles.noData}>No hay datos para mostrar en el rango de fechas seleccionado</p>
+                    ) : (
+                        <div style={styles.tableContainer}>
+                            <table style={styles.table}>
+                                <thead>
+                                    <tr style={styles.tableHeader}>
+                                        {reportData.length > 0 && Object.keys(reportData[0]).map(key => (
+                                            <th key={key} style={styles.th}>
+                                                {key.charAt(0).toUpperCase() + key.slice(1)}
+                                            </th>
+                                        ))}
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {reportData.slice(0, 10).map((item, idx) => (
+                                        <tr key={idx} style={styles.tr}>
+                                            {Object.values(item).map((value, i) => (
+                                                <td key={i} style={styles.td}>
+                                                    {typeof value === 'string' && value.length > 50 
+                                                        ? value.substring(0, 50) + '...' 
+                                                        : value}
+                                                </td>
+                                            ))}
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                            {reportData.length > 10 && (
+                                <p style={styles.moreData}>Mostrando 10 de {reportData.length} registros</p>
+                            )}
+                        </div>
+                    )}
+                </div>
+            )}
+            
+            {recentReports.length > 0 && (
+                <div style={styles.recentContainer}>
+                    <h3 style={styles.sectionTitle}>Reportes Recientes</h3>
+                    {recentReports.map(report => (
+                        <div key={report.id} style={styles.recentItem}>
+                            <div style={styles.recentInfo}>
+                                <strong>{report.name}</strong>
+                                <span style={styles.recentDate}>
+                                    Generado el {new Date(report.date).toLocaleString()}
+                                </span>
+                                <span style={styles.recentFormat}>{report.format}</span>
+                            </div>
+                            <button
+                                onClick={() => {
+                                    setReportType(report.type);
+                                    setStartDate(report.startDate);
+                                    setEndDate(report.endDate);
+                                    setSelectedCourse(report.course);
+                                    setPeriod('otro');
+                                    setTimeout(() => handlePreview(), 100);
+                                }}
+                                style={styles.downloadButton}
+                            >
+                                📥 Descargar
+                            </button>
+                        </div>
+                    ))}
+                </div>
+            )}
         </div>
     );
 };
 
 const styles = {
-    header: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '30px' },
-    title: { margin: 0, color: '#2c3e50', fontSize: '24px', fontWeight: '600' },
-    headerButtons: { display: 'flex', gap: '10px' },
-    pdfButton: { padding: '10px 20px', backgroundColor: '#e74c3c', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '14px' },
-    excelButton: { padding: '10px 20px', backgroundColor: '#27ae60', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '14px' },
-    filters: { display: 'flex', gap: '20px', marginBottom: '30px', backgroundColor: 'white', padding: '20px', borderRadius: '12px', boxShadow: '0 2px 8px rgba(0,0,0,0.08)', alignItems: 'flex-end', flexWrap: 'wrap' },
-    filterGroup: { display: 'flex', flexDirection: 'column', gap: '5px', minWidth: '150px' },
-    filterLabel: { fontWeight: '600', color: '#2c3e50', fontSize: '13px' },
-    select: { padding: '10px', border: '1px solid #dcdfe6', borderRadius: '6px', fontSize: '14px', backgroundColor: 'white' },
-    dateInput: { padding: '10px', border: '1px solid #dcdfe6', borderRadius: '6px', fontSize: '14px' },
-    generateButton: { padding: '10px 24px', backgroundColor: '#27ae60', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '14px', marginLeft: 'auto' },
-    statsGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '15px', marginBottom: '30px' },
-    statCard: { backgroundColor: '#2c3e50', color: 'white', padding: '15px', borderRadius: '10px', textAlign: 'center' },
-    statValue: { display: 'block', fontSize: '28px', fontWeight: 'bold', marginBottom: '5px' },
-    statLabel: { fontSize: '12px', opacity: 0.9 },
-    tableContainer: { backgroundColor: 'white', borderRadius: '12px', boxShadow: '0 2px 8px rgba(0,0,0,0.08)', overflowX: 'auto' },
+    container: { padding: '20px', maxWidth: '1400px', margin: '0 auto' },
+    title: { color: '#2c3e50', marginBottom: '10px', fontSize: '24px', fontWeight: '600' },
+    subtitle: { color: '#7f8c8d', marginBottom: '30px', fontSize: '14px' },
+    formContainer: { backgroundColor: 'white', padding: '25px', borderRadius: '12px', boxShadow: '0 2px 10px rgba(0,0,0,0.1)', marginBottom: '30px' },
+    sectionTitle: { fontSize: '18px', fontWeight: '600', color: '#2c3e50', marginBottom: '20px' },
+    formGroup: { marginBottom: '20px' },
+    label: { display: 'block', marginBottom: '8px', fontWeight: '500', color: '#2c3e50', fontSize: '14px' },
+    select: { width: '100%', padding: '10px', border: '1px solid #bdc3c7', borderRadius: '6px', fontSize: '14px', backgroundColor: 'white' },
+    dateRange: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '20px' },
+    dateInput: { width: '100%', padding: '10px', border: '1px solid #bdc3c7', borderRadius: '6px', fontSize: '14px' },
+    buttonGroup: { display: 'flex', gap: '15px', marginTop: '25px', flexWrap: 'wrap' },
+    previewButton: { padding: '12px 24px', backgroundColor: '#3498db', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '14px', fontWeight: '500' },
+    pdfButton: { padding: '12px 24px', backgroundColor: '#e74c3c', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '14px', fontWeight: '500' },
+    excelButton: { padding: '12px 24px', backgroundColor: '#27ae60', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '14px', fontWeight: '500' },
+    previewContainer: { backgroundColor: 'white', padding: '25px', borderRadius: '12px', boxShadow: '0 2px 10px rgba(0,0,0,0.1)', marginBottom: '30px' },
+    tableContainer: { overflowX: 'auto' },
     table: { width: '100%', borderCollapse: 'collapse' },
     tableHeader: { backgroundColor: '#f8f9fa', borderBottom: '2px solid #27ae60' },
-    th: { padding: '15px', textAlign: 'left', color: '#2c3e50', fontSize: '14px', fontWeight: '600' },
+    th: { padding: '12px', textAlign: 'left', color: '#2c3e50', fontSize: '13px', fontWeight: 'bold' },
     tr: { borderBottom: '1px solid #ecf0f1' },
-    td: { padding: '12px 15px', fontSize: '14px' },
-    nivelBadge: { padding: '4px 10px', borderRadius: '20px', color: 'white', fontSize: '12px', fontWeight: 'bold', display: 'inline-block' },
-    emptyMessage: { textAlign: 'center', padding: '40px', color: '#95a5a6' }
+    td: { padding: '12px', fontSize: '13px' },
+    noData: { textAlign: 'center', padding: '40px', color: '#95a5a6' },
+    moreData: { textAlign: 'center', padding: '10px', color: '#7f8c8d', fontSize: '12px' },
+    recentContainer: { backgroundColor: 'white', padding: '25px', borderRadius: '12px', boxShadow: '0 2px 10px rgba(0,0,0,0.1)' },
+    recentItem: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '15px', borderBottom: '1px solid #ecf0f1' },
+    recentInfo: { display: 'flex', flexDirection: 'column', gap: '5px' },
+    recentDate: { fontSize: '12px', color: '#7f8c8d' },
+    recentFormat: { fontSize: '11px', backgroundColor: '#ecf0f1', padding: '2px 8px', borderRadius: '12px', display: 'inline-block', width: 'fit-content' },
+    downloadButton: { padding: '8px 16px', backgroundColor: '#27ae60', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '13px' }
 };
 
 export default AdminReports;

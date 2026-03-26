@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 const DirectivoLayout = ({ user, onLogout, activeSection, setActiveSection, children }) => {
     const [menuOpen, setMenuOpen] = useState(false);
     const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
+    const [menuItems, setMenuItems] = useState([]);
 
     useEffect(() => {
         const handleResize = () => {
@@ -15,13 +16,59 @@ const DirectivoLayout = ({ user, onLogout, activeSection, setActiveSection, chil
         return () => window.removeEventListener("resize", handleResize);
     }, []);
 
-    const menuItems = [
-        { id: "dashboard", label: "Panel Directivo", icon: "📊" },
-        { id: "seguimiento", label: "Seguimiento General", icon: "📈" },
-        { id: "reportes", label: "Reportes", icon: "📑" },
-        { id: "usuarios", label: "Gestión de Usuarios", icon: "👥" },
-        { id: "mensajeria", label: "Mensajería", icon: "💬" }
-    ];
+    // Escuchar eventos de cambio de sección desde otros componentes
+    useEffect(() => {
+        const handleSectionChange = (event) => {
+            if (event.detail && event.detail.section) {
+                setActiveSection(event.detail.section);
+                if (isMobile) setMenuOpen(false);
+            }
+        };
+        
+        window.addEventListener('changeSection', handleSectionChange);
+        return () => window.removeEventListener('changeSection', handleSectionChange);
+    }, [setActiveSection, isMobile]);
+
+    // Cargar configuración y filtrar menú
+    useEffect(() => {
+        const loadSettings = () => {
+            const savedSettings = localStorage.getItem('adminSettings');
+            let settings = { enableAttendance: true, enableObservations: true, enableMessaging: true };
+            
+            if (savedSettings) {
+                try {
+                    settings = JSON.parse(savedSettings);
+                } catch (e) {
+                    console.error('Error parsing settings:', e);
+                }
+            }
+            
+            const allItems = [
+                { id: "dashboard", label: "Panel Directivo", icon: "📊" },
+                { id: "seguimiento", label: "Seguimiento General", icon: "📈" },
+                { id: "reportes", label: "Reportes", icon: "📑" },
+                { id: "usuarios", label: "Gestión de Usuarios", icon: "👥" },
+                { id: "mensajeria", label: "Mensajería", icon: "💬" }
+            ];
+            
+            // Filtrar según configuración
+            const filtered = allItems.filter(item => {
+                if (item.id === "mensajeria") return settings.enableMessaging;
+                return true; // todos los demás siempre visibles para directivo
+            });
+            
+            setMenuItems(filtered);
+        };
+        
+        loadSettings();
+        
+        const handleStorageChange = () => {
+            loadSettings();
+        };
+        
+        window.addEventListener('storage', handleStorageChange);
+        return () => window.removeEventListener('storage', handleStorageChange);
+    }, []);
 
     return (
         <div style={styles.container}>

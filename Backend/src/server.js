@@ -5,6 +5,8 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import fs from 'fs';
+
 import connectDB from './Config/db.js';
 
 // Importar TODAS las rutas
@@ -31,18 +33,16 @@ const app = express();
 const PORT = process.env.PORT || 5000;
 
 // ===========================================
-// CONFIGURACIÓN CORS - VERSIÓN MUY PERMISIVA PARA PRUEBAS
+// CONFIGURACIÓN CORS
 // ===========================================
 app.use(cors({
-    origin: true, // Esto permite cualquier origen
+    origin: true,
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
 }));
 
-// Middleware para manejar preflight
 app.options('*', cors());
-
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
@@ -52,6 +52,69 @@ app.use(express.urlencoded({ extended: true }));
 const uploadsPath = path.join(__dirname, '..', 'uploads');
 app.use('/uploads', express.static(uploadsPath));
 console.log('📁 Sirviendo archivos estáticos desde:', uploadsPath);
+
+// ===========================================
+// ENDPOINT PARA DESCARGAR DOCUMENTOS CON MANEJO DE CARACTERES ESPECIALES
+// ===========================================
+app.get('/api/download/:filename', (req, res) => {
+    try {
+        let filename = req.params.filename;
+        
+        // Decodificar el nombre del archivo
+        filename = decodeURIComponent(filename);
+        
+        console.log('🔍 Buscando archivo:', filename);
+        
+        // Buscar en la carpeta uploads
+        const uploadsDir = path.join(__dirname, '..', 'uploads');
+        
+        if (!fs.existsSync(uploadsDir)) {
+            console.error('❌ Carpeta uploads no existe');
+            return res.status(404).send('Carpeta de archivos no encontrada');
+        }
+        
+        // Obtener todos los archivos en la carpeta
+        const files = fs.readdirSync(uploadsDir);
+        
+        // Función para normalizar nombres (eliminar caracteres especiales)
+        const normalizeName = (name) => {
+            return name
+                .normalize('NFD')
+                .replace(/[\u0300-\u036f]/g, '')
+                .replace(/ñ/g, 'n')
+                .replace(/Ñ/g, 'N')
+                .toLowerCase();
+        };
+        
+        // Buscar el archivo exacto
+        let foundFile = files.find(f => f === filename);
+        
+        // Si no se encuentra, buscar por nombre normalizado
+        if (!foundFile) {
+            const normalizedSearch = normalizeName(filename);
+            foundFile = files.find(f => normalizeName(f) === normalizedSearch);
+        }
+        
+        // Si aún no se encuentra, buscar si el nombre está contenido
+        if (!foundFile) {
+            const searchBase = filename.split('_')[0];
+            foundFile = files.find(f => f.includes(searchBase));
+        }
+        
+        if (foundFile) {
+            const filePath = path.join(uploadsDir, foundFile);
+            console.log('✅ Archivo encontrado:', foundFile);
+            res.sendFile(filePath);
+        } else {
+            console.log('❌ Archivo no encontrado:', filename);
+            console.log('📁 Archivos disponibles:', files);
+            res.status(404).send('Archivo no encontrado');
+        }
+    } catch (error) {
+        console.error('❌ Error al descargar archivo:', error);
+        res.status(500).send('Error al acceder al archivo');
+    }
+});
 
 // Registrar TODAS las rutas
 app.use('/api/auth', authRoutes);
@@ -66,7 +129,7 @@ app.use('/api/directivo', directivoRoutes);
 
 // Ruta de prueba
 app.get('/api/test', (req, res) => {
-    res.json({ 
+    res.json({
         message: '✅ API Orizon Cottage funcionando correctamente',
         database: mongoose.connection.readyState === 1 ? 'Conectado' : 'Desconectado'
     });
@@ -75,8 +138,8 @@ app.get('/api/test', (req, res) => {
 // Manejador de errores
 app.use((err, req, res, next) => {
     console.error('❌ Error:', err.stack);
-    res.status(500).json({ 
-        success: false, 
+    res.status(500).json({
+        success: false,
         message: 'Error interno del servidor'
     });
 });
@@ -86,5 +149,6 @@ app.listen(PORT, () => {
     console.log(`📂 Servidor corriendo en http://localhost:${PORT}`);
     console.log(`📂 Documentación API: http://localhost:${PORT}/api/test`);
     console.log(`📂 Archivos estáticos disponibles en: http://localhost:${PORT}/uploads/`);
+    console.log(`📂 Descarga de documentos: http://localhost:${PORT}/api/download/`);
     console.log(`📂 MongoDB: ${mongoose.connection.readyState === 1 ? '✅ Conectado' : '❌ Desconectado'}`);
 });

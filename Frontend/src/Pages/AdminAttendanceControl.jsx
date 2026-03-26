@@ -5,28 +5,26 @@ const AdminAttendanceControl = () => {
     const [attendance, setAttendance] = useState([]);
     const [students, setStudents] = useState([]);
     const [filteredStudents, setFilteredStudents] = useState([]);
-    const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
+    const [selectedDate, setSelectedDate] = useState(new Date().toLocaleDateString('en-CA'));
     const [selectedGrade, setSelectedGrade] = useState('todos');
     const [selectedSpecificGrade, setSelectedSpecificGrade] = useState('todos');
     const [loading, setLoading] = useState(false);
     const [showEditModal, setShowEditModal] = useState(false);
     const [currentStudent, setCurrentStudent] = useState(null);
     const [editData, setEditData] = useState({ estado: '', motivo: '', observacion: '' });
-    const [stats, setStats] = useState({ present: 0, absent: 0, late: 0, total: 0 });
+    const [stats, setStats] = useState({ present: 0, absent: 0, late: 0 });
     const [currentPage, setCurrentPage] = useState(1);
     const itemsPerPage = 20;
 
     const gradeMapping = { 'preescolar': ['0°'], 'primaria': ['1°', '2°', '3°', '4°', '5°'], 'secundaria': ['6°', '7°', '8°', '9°', '10°', '11°'] };
     const motivoMap = { 'enfermedad': 'Enfermedad', 'permiso': 'Permiso', 'sin_justificar': 'Sin justificar', 'otro': 'Otro' };
     const [specificOptions, setSpecificOptions] = useState([]);
-
-    // Crear un mapa de asistencias para acceso rápido
-    const attendanceMap = new Map();
+    const [attendanceMap, setAttendanceMap] = useState(new Map());
 
     useEffect(() => { fetchStudents(); }, []);
     useEffect(() => { if (selectedDate) fetchAttendance(); }, [selectedDate]);
     useEffect(() => { applyFilters(); setCurrentPage(1); }, [selectedGrade, selectedSpecificGrade, students]);
-    useEffect(() => { calculateStats(); }, [attendance, filteredStudents]);
+    useEffect(() => { calculateStats(); }, [attendanceMap, filteredStudents]);
     useEffect(() => {
         if (selectedGrade !== 'todos') { setSpecificOptions(gradeMapping[selectedGrade] || []); setSelectedSpecificGrade('todos'); }
         else { setSpecificOptions([]); setSelectedSpecificGrade('todos'); }
@@ -52,6 +50,9 @@ const AdminAttendanceControl = () => {
             const data = await res.json();
             if (data.success) {
                 console.log(`📊 Asistencia para ${selectedDate}:`, data.attendance?.length || 0, 'registros');
+                if (data.attendance?.length > 0) {
+                    console.log('📝 Ejemplo de registro:', data.attendance[0]);
+                }
                 setAttendance(data.attendance || []);
             }
         } catch (error) { console.error('Error:', error); }
@@ -60,9 +61,8 @@ const AdminAttendanceControl = () => {
 
     // Actualizar el mapa de asistencias cada vez que cambia attendance
     useEffect(() => {
-        attendanceMap.clear();
+        const newMap = new Map();
         attendance.forEach(record => {
-            // Obtener el studentId correctamente (puede ser objeto o string)
             let studentId = null;
             if (record.studentId) {
                 if (typeof record.studentId === 'object' && record.studentId._id) {
@@ -74,11 +74,12 @@ const AdminAttendanceControl = () => {
                 }
             }
             if (studentId) {
-                attendanceMap.set(studentId, record);
+                newMap.set(studentId, record);
             }
         });
-        console.log('🗺️ Mapa de asistencias actualizado:', attendanceMap.size, 'registros');
-    }, [attendance]);
+        setAttendanceMap(newMap);
+        console.log('🗺️ Mapa de asistencias actualizado:', newMap.size, 'registros para la fecha', selectedDate);
+    }, [attendance, selectedDate]);
 
     const applyFilters = () => {
         let filtered = [...students];
@@ -98,25 +99,28 @@ const AdminAttendanceControl = () => {
     };
 
     const calculateStats = () => {
-        let present = 0, absent = 0, late = 0, total = 0;
+        let present = 0, absent = 0, late = 0;
         
         filteredStudents.forEach(student => {
             const studentId = student._id.toString();
             const record = attendanceMap.get(studentId);
             
             if (record) {
-                total++;
                 if (record.estado === 'presente') present++;
                 else if (record.estado === 'ausente') absent++;
                 else if (record.estado === 'tarde') late++;
             }
         });
         
-        console.log('📊 Estadísticas calculadas:', { present, absent, late, total });
-        setStats({ present, absent, late, total });
+        console.log('📊 ESTADÍSTICAS:', { 
+            fecha: selectedDate,
+            presentes: present, 
+            ausentes: absent, 
+            tardanzas: late
+        });
+        setStats({ present, absent, late });
     };
 
-    // Obtener el registro de asistencia de un estudiante
     const getStudentRecord = (studentId) => {
         const id = studentId.toString();
         return attendanceMap.get(id);
@@ -137,10 +141,12 @@ const AdminAttendanceControl = () => {
     
     const getStudentObservacion = (studentId) => {
         const record = getStudentRecord(studentId);
-        return (record?.observacion && record.observacion !== '') ? record.observacion : '-';
+        if (record && record.observacion && record.observacion !== '') {
+            return record.observacion;
+        }
+        return '-';
     };
 
-    // Abrir modal de edición para corregir asistencia
     const openEditModal = (student) => {
         const record = getStudentRecord(student._id);
         setCurrentStudent(student);
@@ -152,7 +158,6 @@ const AdminAttendanceControl = () => {
         setShowEditModal(true);
     };
 
-    // Guardar cambios de asistencia
     const handleSaveEdit = async () => {
         if (!currentStudent) return;
         
@@ -212,24 +217,67 @@ const AdminAttendanceControl = () => {
         }
     };
 
+    // Contar cuántos estudiantes tienen registro en la fecha actual (para mostrar el mensaje)
+    const registeredCount = filteredStudents.filter(student => {
+        const record = attendanceMap.get(student._id.toString());
+        return record !== undefined;
+    }).length;
+
     return (
         <div>
             <h2 style={styles.title}>Control de Inasistencias</h2>
+            
+            {/* Indicador de datos disponibles */}
+            {registeredCount === 0 && !loading && (
+                <div style={{...styles.infoBox, backgroundColor: '#fff3cd', color: '#856404'}}>
+                    ⚠️ No hay registros de asistencia para la fecha {selectedDate} en los grados seleccionados.
+                </div>
+            )}
+            
+            {registeredCount > 0 && !loading && (
+                <div style={{...styles.infoBox, backgroundColor: '#d4edda', color: '#155724'}}>
+                    ✅ Mostrando {registeredCount} registros de asistencia para la fecha {selectedDate}
+                </div>
+            )}
+            
             <div style={styles.filters}>
-                <div style={styles.filterGroup}><label style={styles.filterLabel}>Fecha:</label><input type="date" value={selectedDate} onChange={(e) => setSelectedDate(e.target.value)} style={styles.dateInput} /></div>
-                <div style={styles.filterGroup}><label style={styles.filterLabel}>Grado General:</label><select value={selectedGrade} onChange={handleGradeChange} style={styles.gradeSelect}>
-                    <option value="todos">Todos los grados</option><option value="preescolar">Preescolar</option><option value="primaria">Primaria</option><option value="secundaria">Secundaria</option>
-                </select></div>
-                {specificOptions.length > 0 && <div style={styles.filterGroup}><label style={styles.filterLabel}>Grado Específico:</label><select value={selectedSpecificGrade} onChange={(e) => setSelectedSpecificGrade(e.target.value)} style={styles.gradeSelect}>
-                    <option value="todos">Todos los grados</option>{specificOptions.map(grade => <option key={grade} value={grade}>{grade}</option>)}
-                </select></div>}
+                <div style={styles.filterGroup}>
+                    <label style={styles.filterLabel}>Fecha:</label>
+                    <input type="date" value={selectedDate} onChange={(e) => setSelectedDate(e.target.value)} style={styles.dateInput} />
+                </div>
+                <div style={styles.filterGroup}>
+                    <label style={styles.filterLabel}>Grado General:</label>
+                    <select value={selectedGrade} onChange={handleGradeChange} style={styles.gradeSelect}>
+                        <option value="todos">Todos los grados</option>
+                        <option value="preescolar">Preescolar</option>
+                        <option value="primaria">Primaria</option>
+                        <option value="secundaria">Secundaria</option>
+                    </select>
+                </div>
+                {specificOptions.length > 0 && (
+                    <div style={styles.filterGroup}>
+                        <label style={styles.filterLabel}>Grado Específico:</label>
+                        <select value={selectedSpecificGrade} onChange={(e) => setSelectedSpecificGrade(e.target.value)} style={styles.gradeSelect}>
+                            <option value="todos">Todos los grados</option>
+                            {specificOptions.map(grade => <option key={grade} value={grade}>{grade}</option>)}
+                        </select>
+                    </div>
+                )}
             </div>
             
             <div style={styles.statsContainer}>
-                <div style={styles.statBox}><span style={styles.statValue}>{stats.present}</span><span style={styles.statLabel}>Presentes</span></div>
-                <div style={styles.statBox}><span style={styles.statValue}>{stats.absent}</span><span style={styles.statLabel}>Ausentes</span></div>
-                <div style={styles.statBox}><span style={styles.statValue}>{stats.late}</span><span style={styles.statLabel}>Tardanzas</span></div>
-                <div style={styles.statBox}><span style={styles.statValue}>{stats.total}</span><span style={styles.statLabel}>Total Registrados</span></div>
+                <div style={styles.statBox}>
+                    <span style={styles.statValue}>{stats.present}</span>
+                    <span style={styles.statLabel}>Presentes</span>
+                </div>
+                <div style={styles.statBox}>
+                    <span style={styles.statValue}>{stats.absent}</span>
+                    <span style={styles.statLabel}>Ausentes</span>
+                </div>
+                <div style={styles.statBox}>
+                    <span style={styles.statValue}>{stats.late}</span>
+                    <span style={styles.statLabel}>Tardanzas</span>
+                </div>
             </div>
             
             {loading ? <p>Cargando...</p> : <>
@@ -360,12 +408,13 @@ const AdminAttendanceControl = () => {
 
 const styles = {
     title: { color: '#2c3e50', marginBottom: '30px', fontSize: '22px', fontWeight: '600' },
+    infoBox: { padding: '12px 20px', borderRadius: '8px', marginBottom: '20px', fontSize: '14px', textAlign: 'center' },
     filters: { display: 'flex', gap: '20px', marginBottom: '30px', backgroundColor: 'white', padding: '20px', borderRadius: '10px', boxShadow: '0 2px 10px rgba(0,0,0,0.1)', flexWrap: 'wrap' },
     filterGroup: { display: 'flex', flexDirection: 'column', gap: '5px', minWidth: '150px' },
     filterLabel: { fontWeight: 'bold', color: '#2c3e50', fontSize: '13px' },
     dateInput: { padding: '8px', border: '1px solid #bdc3c7', borderRadius: '5px', fontSize: '14px' },
     gradeSelect: { padding: '8px', border: '1px solid #bdc3c7', borderRadius: '5px', fontSize: '14px', minWidth: '150px', backgroundColor: 'white' },
-    statsContainer: { display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '20px', marginBottom: '30px' },
+    statsContainer: { display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '20px', marginBottom: '30px' },
     statBox: { backgroundColor: 'white', padding: '20px', borderRadius: '10px', boxShadow: '0 2px 10px rgba(0,0,0,0.1)', textAlign: 'center' },
     statValue: { display: 'block', fontSize: '28px', fontWeight: 'bold', color: '#2c3e50' },
     statLabel: { display: 'block', marginTop: '5px', color: '#7f8c8d', fontSize: '14px' },

@@ -1,4 +1,5 @@
 // Backend/src/Logic/student.controller.js
+// Backend/src/Logic/student.controller.js
 import Student from '../Data/student.model.js';
 import mongoose from 'mongoose';
 
@@ -320,6 +321,56 @@ export const getStudentsByParent = async (req, res) => {
 
     } catch (error) {
         console.error('❌ Error en getStudentsByParent:', error);
+        res.status(500).json({
+            success: false,
+            message: error.message
+        });
+    }
+};
+
+// ===========================================
+// NUEVA FUNCIÓN: ACTUALIZAR ESTUDIANTE
+// ===========================================
+export const updateStudent = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const updateData = req.body;
+        
+        console.log('📝 Actualizando estudiante ID:', id);
+        console.log('📝 Datos a actualizar:', updateData);
+        
+        // Validar que el ID sea válido
+        if (!mongoose.Types.ObjectId.isValid(id)) {
+            return res.status(400).json({
+                success: false,
+                message: 'ID de estudiante inválido'
+            });
+        }
+        
+        // Buscar y actualizar el estudiante
+        const updatedStudent = await Student.findByIdAndUpdate(
+            id,
+            { $set: updateData },
+            { new: true, runValidators: true }
+        );
+        
+        if (!updatedStudent) {
+            return res.status(404).json({
+                success: false,
+                message: 'Estudiante no encontrado'
+            });
+        }
+        
+        console.log('✅ Estudiante actualizado:', updatedStudent._id);
+        
+        res.json({
+            success: true,
+            message: 'Estudiante actualizado exitosamente',
+            data: updatedStudent
+        });
+        
+    } catch (error) {
+        console.error('❌ Error al actualizar estudiante:', error);
         res.status(500).json({
             success: false,
             message: error.message

@@ -1,4 +1,5 @@
 // Backend/src/Logic/attendance.controller.js
+// Backend/src/Logic/attendance.controller.js
 import Attendance from '../Data/attendance.model.js';
 import mongoose from 'mongoose';
 import Student from '../Data/student.model.js';
@@ -12,7 +13,6 @@ export const registerAttendance = async (req, res) => {
 
         console.log('📝 Registrando asistencia:', { studentId, fecha, estado, motivo, observacion });
 
-        // Validar campos requeridos
         if (!studentId || !fecha || !estado || !registradoPor) {
             return res.status(400).json({
                 success: false,
@@ -20,18 +20,15 @@ export const registerAttendance = async (req, res) => {
             });
         }
 
-        // Crear objeto de fecha
-        const fechaObj = new Date(fecha);
-        fechaObj.setHours(0, 0, 0, 0);
+        // La fecha ya viene en formato YYYY-MM-DD del frontend
+        const fechaStr = fecha;
 
-        // Verificar si ya existe registro para este estudiante en esta fecha
         let attendance = await Attendance.findOne({
             studentId,
-            fecha: fechaObj
+            fecha: fechaStr
         });
 
         if (attendance) {
-            // Actualizar existente
             attendance.estado = estado;
             attendance.motivo = motivo || '';
             attendance.observacion = observacion || '';
@@ -39,10 +36,9 @@ export const registerAttendance = async (req, res) => {
             await attendance.save();
             console.log('✅ Asistencia actualizada:', attendance._id);
         } else {
-            // Crear nuevo
             attendance = new Attendance({
                 studentId,
-                fecha: fechaObj,
+                fecha: fechaStr,
                 estado,
                 motivo: motivo || '',
                 observacion: observacion || '',
@@ -82,17 +78,11 @@ export const getAttendanceByDate = async (req, res) => {
             });
         }
 
-        const startDate = new Date(date);
-        startDate.setHours(0, 0, 0, 0);
-
-        const endDate = new Date(date);
-        endDate.setHours(23, 59, 59, 999);
-
         const attendance = await Attendance.find({
-            fecha: { $gte: startDate, $lte: endDate }
-        }).populate('studentId', 'apellido1 apellido grado grado_especifico');
+            fecha: date
+        }).populate('studentId', 'apellido1 apellido grado_especifico');
 
-        console.log('📤 Enviando', attendance.length, 'registros de asistencia');
+        console.log('📤 Enviando', attendance.length, 'registros de asistencia para fecha:', date);
 
         res.json({
             success: true,
@@ -109,6 +99,42 @@ export const getAttendanceByDate = async (req, res) => {
 };
 
 // ===========================================
+// OBTENER ASISTENCIA POR RANGO DE FECHAS (PARA REPORTES)
+// ===========================================
+export const getAttendanceByDateRange = async (req, res) => {
+    try {
+        const { startDate, endDate } = req.query;
+        
+        console.log('📅 Reporte asistencia - Rango:', { startDate, endDate });
+        
+        if (!startDate || !endDate) {
+            return res.status(400).json({
+                success: false,
+                message: 'Fechas de inicio y fin requeridas'
+            });
+        }
+
+        const attendance = await Attendance.find({
+            fecha: { $gte: startDate, $lte: endDate }
+        }).populate('studentId', 'apellido1 apellido grado_especifico');
+
+        console.log(`✅ Encontrados ${attendance.length} registros de asistencia en el rango`);
+        
+        res.json({
+            success: true,
+            attendance
+        });
+        
+    } catch (error) {
+        console.error('❌ Error en getAttendanceByDateRange:', error);
+        res.status(500).json({ 
+            success: false, 
+            message: error.message 
+        });
+    }
+};
+
+// ===========================================
 // OBTENER ASISTENCIA POR ESTUDIANTE
 // ===========================================
 export const getAttendanceByStudent = async (req, res) => {
@@ -118,15 +144,12 @@ export const getAttendanceByStudent = async (req, res) => {
 
         console.log(`🔍 Buscando asistencias para estudiante: ${studentId}`);
 
-        // Construir query
         let query = Attendance.find({ studentId }).sort({ fecha: -1 });
-
         if (limit) {
             query = query.limit(parseInt(limit));
         }
 
         const asistencias = await query;
-
         console.log(`✅ Encontradas ${asistencias.length} asistencias`);
 
         res.json({
@@ -144,7 +167,7 @@ export const getAttendanceByStudent = async (req, res) => {
 };
 
 // ===========================================
-// OBTENER ASISTENCIAS POR DOCENTE (NUEVO)
+// OBTENER ASISTENCIAS POR DOCENTE
 // ===========================================
 export const getAttendanceByTeacher = async (req, res) => {
     try {
@@ -160,7 +183,6 @@ export const getAttendanceByTeacher = async (req, res) => {
             });
         }
 
-        // 1. Obtener los grados que enseña el docente desde la colección users
         const db = mongoose.connection.db;
         const docente = await db.collection('users').findOne({
             _id: new mongoose.Types.ObjectId(docenteId),
@@ -186,7 +208,6 @@ export const getAttendanceByTeacher = async (req, res) => {
 
         console.log('📚 Grados del docente:', gradosDocente);
 
-        // 2. Obtener IDs de estudiantes en esos grados
         const estudiantesIds = await db.collection('students')
             .find({ grado_especifico: { $in: gradosDocente } })
             .project({ _id: 1 })
@@ -202,25 +223,13 @@ export const getAttendanceByTeacher = async (req, res) => {
             });
         }
 
-        // 3. Construir filtro de fechas
-        let fechaFilter = {};
-        if (startDate && endDate) {
-            fechaFilter = {
-                fecha: {
-                    $gte: new Date(startDate),
-                    $lte: new Date(endDate)
-                }
-            };
-        }
-
-        // 4. Buscar asistencias de esos estudiantes
-        let query = Attendance.find({ studentId: { $in: estudiantesIdList } });
+        let query = { studentId: { $in: estudiantesIdList } };
         
-        if (fechaFilter.fecha) {
-            query = query.find(fechaFilter);
+        if (startDate && endDate) {
+            query.fecha = { $gte: startDate, $lte: endDate };
         }
 
-        let attendanceQuery = query
+        let attendanceQuery = Attendance.find(query)
             .populate('studentId', 'apellido1 apellido grado_especifico')
             .sort({ fecha: -1 });
 
@@ -229,7 +238,6 @@ export const getAttendanceByTeacher = async (req, res) => {
         }
 
         const asistencias = await attendanceQuery;
-
         console.log(`✅ Encontradas ${asistencias.length} asistencias para el docente`);
 
         res.json({
@@ -263,10 +271,7 @@ export const getAttendanceSummary = async (req, res) => {
         const summary = await Attendance.aggregate([
             {
                 $match: {
-                    fecha: {
-                        $gte: new Date(startDate),
-                        $lte: new Date(endDate)
-                    }
+                    fecha: { $gte: startDate, $lte: endDate }
                 }
             },
             {

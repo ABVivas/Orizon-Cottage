@@ -1,4 +1,5 @@
 // Backend/src/Logic/observation.controller.js
+// Backend/src/Logic/observation.controller.js
 import Observation from "../Data/observation.model.js";
 import mongoose from 'mongoose';
 import fs from 'fs';
@@ -13,7 +14,6 @@ export const createObservation = async (req, res) => {
 
         console.log('📝 Creando observación:', { studentId, docenteId, tipo, nivel });
 
-        // Validar campos requeridos
         if (!studentId || !docenteId || !tipo || !descripcion || !nivel) {
             return res.status(400).json({
                 success: false,
@@ -21,7 +21,6 @@ export const createObservation = async (req, res) => {
             });
         }
 
-        // Validar que el nivel sea uno de los permitidos
         if (!["Tipo I", "Tipo II", "Tipo III"].includes(nivel)) {
             return res.status(400).json({
                 success: false,
@@ -29,8 +28,8 @@ export const createObservation = async (req, res) => {
             });
         }
 
-        // Determinar si requiere seguimiento (Tipo II y Tipo III siempre requieren)
         const requiereSeguimiento = nivel !== "Tipo I";
+        const fechaStr = new Date().toLocaleDateString('en-CA');
 
         const newObservation = new Observation({
             studentId,
@@ -40,7 +39,7 @@ export const createObservation = async (req, res) => {
             descripcion,
             planMejora: planMejora || '',
             requiereSeguimiento,
-            // Si es Tipo II o III, inicializar el seguimiento
+            fecha: fechaStr,
             seguimiento: requiereSeguimiento ? [{
                 comentario: "Observación creada - Pendiente de seguimiento",
                 realizadoPor: docenteId,
@@ -49,8 +48,6 @@ export const createObservation = async (req, res) => {
         });
 
         await newObservation.save();
-
-        // Poblar los datos del docente para la respuesta
         await newObservation.populate('docenteId', 'nombre');
 
         res.status(201).json({
@@ -70,7 +67,7 @@ export const createObservation = async (req, res) => {
 };
 
 // ===========================================
-// CREAR OBSERVACIÓN CON ARCHIVO (NUEVO)
+// CREAR OBSERVACIÓN CON ARCHIVO
 // ===========================================
 export const createObservationWithFile = async (req, res) => {
     try {
@@ -79,33 +76,25 @@ export const createObservationWithFile = async (req, res) => {
 
         console.log('📝 Creando observación CON ARCHIVO:', { studentId, docenteId, tipo, nivel, file: file?.originalname });
 
-        // Validar campos requeridos
         if (!studentId || !docenteId || !tipo || !descripcion || !nivel) {
-            // Si hay archivo, eliminarlo para no dejar archivos huérfanos
-            if (file) {
-                fs.unlinkSync(file.path);
-            }
+            if (file) fs.unlinkSync(file.path);
             return res.status(400).json({
                 success: false,
                 message: "Todos los campos son obligatorios"
             });
         }
 
-        // Validar que el nivel sea uno de los permitidos
         if (!["Tipo I", "Tipo II", "Tipo III"].includes(nivel)) {
-            if (file) {
-                fs.unlinkSync(file.path);
-            }
+            if (file) fs.unlinkSync(file.path);
             return res.status(400).json({
                 success: false,
                 message: "El nivel debe ser Tipo I, Tipo II o Tipo III según el Manual de Convivencia"
             });
         }
 
-        // Determinar si requiere seguimiento (Tipo II y Tipo III siempre requieren)
         const requiereSeguimiento = nivel !== "Tipo I";
+        const fechaStr = new Date().toLocaleDateString('en-CA');
 
-        // Preparar objeto de observación
         const observationData = {
             studentId,
             docenteId,
@@ -114,6 +103,7 @@ export const createObservationWithFile = async (req, res) => {
             descripcion,
             planMejora: planMejora || '',
             requiereSeguimiento,
+            fecha: fechaStr,
             seguimiento: requiereSeguimiento ? [{
                 comentario: "Observación creada - Pendiente de seguimiento",
                 realizadoPor: docenteId,
@@ -121,7 +111,6 @@ export const createObservationWithFile = async (req, res) => {
             }] : []
         };
 
-        // Si hay archivo, agregar información del documento
         if (file) {
             observationData.documentoPlan = {
                 nombre: file.originalname,
@@ -133,8 +122,6 @@ export const createObservationWithFile = async (req, res) => {
 
         const newObservation = new Observation(observationData);
         await newObservation.save();
-
-        // Poblar los datos del docente para la respuesta
         await newObservation.populate('docenteId', 'nombre');
 
         res.status(201).json({
@@ -145,20 +132,79 @@ export const createObservationWithFile = async (req, res) => {
 
     } catch (error) {
         console.error('❌ Error al crear observación con archivo:', error);
-        
-        // Si hay archivo, eliminarlo en caso de error
         if (req.file) {
-            try {
-                fs.unlinkSync(req.file.path);
-            } catch (unlinkError) {
-                console.error('Error al eliminar archivo:', unlinkError);
-            }
+            try { fs.unlinkSync(req.file.path); } catch (e) {}
         }
-        
         res.status(500).json({
             success: false,
             message: "Error al guardar la observación",
             error: error.message
+        });
+    }
+};
+
+// ===========================================
+// OBTENER OBSERVACIONES CON FILTROS (NUEVA FUNCIÓN)
+// ===========================================
+export const getObservations = async (req, res) => {
+    try {
+        const { startDate, endDate, tipo, nivel, studentId, limit = 100, page = 1 } = req.query;
+        
+        console.log('🔍 Buscando observaciones con filtros:', { startDate, endDate, tipo, nivel });
+        
+        let query = {};
+        
+        // Filtro por fechas - IMPORTANTE: las fechas son strings en formato YYYY-MM-DD
+        if (startDate && endDate) {
+            query.fecha = {
+                $gte: startDate,
+                $lte: endDate
+            };
+            console.log('📅 Filtro de fechas:', { startDate, endDate });
+        }
+        
+        // Filtro por tipo
+        if (tipo && tipo !== 'todos' && tipo !== 'undefined') {
+            query.tipo = tipo;
+        }
+        
+        // Filtro por nivel
+        if (nivel && nivel !== 'todos' && nivel !== 'undefined') {
+            query.nivel = nivel;
+        }
+        
+        // Filtro por estudiante
+        if (studentId && mongoose.Types.ObjectId.isValid(studentId)) {
+            query.studentId = new mongoose.Types.ObjectId(studentId);
+        }
+        
+        const skip = (parseInt(page) - 1) * parseInt(limit);
+        
+        const observations = await Observation.find(query)
+            .populate('studentId', 'apellido1 apellido grado_especifico')
+            .populate('docenteId', 'nombre')
+            .sort({ fecha: -1 })
+            .skip(skip)
+            .limit(parseInt(limit));
+        
+        const total = await Observation.countDocuments(query);
+        
+        console.log(`✅ Encontradas ${observations.length} observaciones (total: ${total})`);
+        
+        res.json({
+            success: true,
+            data: observations,
+            total,
+            page: parseInt(page),
+            limit: parseInt(limit),
+            pages: Math.ceil(total / parseInt(limit))
+        });
+        
+    } catch (error) {
+        console.error('❌ Error en getObservations:', error);
+        res.status(500).json({
+            success: false,
+            message: error.message
         });
     }
 };
@@ -169,11 +215,10 @@ export const createObservationWithFile = async (req, res) => {
 export const getObservationsByTeacher = async (req, res) => {
     try {
         const { docenteId } = req.params;
-        const { limit = 20, page = 1 } = req.query;
+        const { limit = 20, page = 1, startDate, endDate } = req.query;
 
         console.log('🔍 Buscando observaciones para docente ID:', docenteId);
 
-        // Validar que el ID sea válido
         if (!mongoose.Types.ObjectId.isValid(docenteId)) {
             return res.status(400).json({
                 success: false,
@@ -181,19 +226,26 @@ export const getObservationsByTeacher = async (req, res) => {
             });
         }
 
+        let query = {
+            docenteId: new mongoose.Types.ObjectId(docenteId)
+        };
+        
+        if (startDate && endDate) {
+            query.fecha = {
+                $gte: startDate,
+                $lte: endDate
+            };
+        }
+
         const skip = (parseInt(page) - 1) * parseInt(limit);
 
-        const observaciones = await Observation.find({
-            docenteId: new mongoose.Types.ObjectId(docenteId)
-        })
-        .populate('studentId', 'apellido1 apellido grado_especifico id_estudiante')
-        .sort({ fecha: -1 })
-        .skip(skip)
-        .limit(parseInt(limit));
+        const observaciones = await Observation.find(query)
+            .populate('studentId', 'apellido1 apellido grado_especifico id_estudiante')
+            .sort({ fecha: -1 })
+            .skip(skip)
+            .limit(parseInt(limit));
 
-        const total = await Observation.countDocuments({
-            docenteId: new mongoose.Types.ObjectId(docenteId)
-        });
+        const total = await Observation.countDocuments(query);
 
         console.log(`✅ Encontradas ${observaciones.length} observaciones (total: ${total})`);
 
@@ -218,7 +270,7 @@ export const getObservationsByTeacher = async (req, res) => {
 };
 
 // ===========================================
-// OBTENER OBSERVACIONES POR ESTUDIANTE (para acudientes)
+// OBTENER OBSERVACIONES POR ESTUDIANTE
 // ===========================================
 export const getObservationsByStudent = async (req, res) => {
     try {
@@ -295,14 +347,12 @@ export const updateObservationFollowup = async (req, res) => {
             });
         }
 
-        // Agregar nuevo seguimiento
         observation.seguimiento.push({
             comentario,
             estado,
             realizadoPor
         });
 
-        // Si el estado es "cumplido", cerrar el seguimiento
         if (estado === "cumplido") {
             observation.requiereSeguimiento = false;
         }
@@ -330,80 +380,62 @@ export const updateObservationFollowup = async (req, res) => {
 export const getObservationsSummary = async (req, res) => {
     try {
         const { startDate, endDate, grado } = req.query;
-
-        let matchStage = {};
-
-        // Filtro por fecha
+        
+        console.log('📊 Generando resumen de observaciones...');
+        console.log('📅 Fechas:', { startDate, endDate });
+        
+        let query = {};
+        
         if (startDate && endDate) {
-            matchStage.fecha = {
-                $gte: new Date(startDate),
-                $lte: new Date(endDate)
+            query.fecha = {
+                $gte: startDate,
+                $lte: endDate
             };
         }
-
-        // Pipeline de agregación
-        const pipeline = [
-            { $match: matchStage },
-            {
-                $group: {
-                    _id: {
-                        nivel: "$nivel",
-                        tipo: "$tipo"
-                    },
-                    count: { $sum: 1 }
-                }
-            },
-            { $sort: { "_id.nivel": 1, "_id.tipo": 1 } }
-        ];
-
-        // Si se especifica grado, unir con estudiantes
+        
+        let observations = await Observation.find(query).populate('studentId', 'grado_especifico');
+        
+        console.log(`📝 Total observaciones encontradas: ${observations.length}`);
+        
         if (grado && grado !== 'todos') {
-            pipeline.unshift({
-                $lookup: {
-                    from: "students",
-                    localField: "studentId",
-                    foreignField: "_id",
-                    as: "estudiante"
-                }
-            });
-            pipeline.unshift({
-                $match: {
-                    "estudiante.grado_especifico": grado
-                }
-            });
+            observations = observations.filter(obs => 
+                obs.studentId?.grado_especifico === grado
+            );
+            console.log(`📝 Filtradas por grado ${grado}: ${observations.length} observaciones`);
         }
-
-        const summary = await Observation.aggregate(pipeline);
-
-        // Formatear resultados
-        const result = {
-            total: 0,
-            porNivel: {
-                "Tipo I": 0,
-                "Tipo II": 0,
-                "Tipo III": 0
-            },
-            porTipo: {
-                "Académica": 0,
-                "Disciplinaria": 0,
-                "General": 0
-            },
-            detalle: summary
+        
+        const porNivel = {
+            "Tipo I": 0,
+            "Tipo II": 0,
+            "Tipo III": 0
         };
-
-        summary.forEach(item => {
-            result.total += item.count;
-            if (item._id.nivel) {
-                result.porNivel[item._id.nivel] = (result.porNivel[item._id.nivel] || 0) + item.count;
+        
+        const porTipo = {
+            "Académica": 0,
+            "Disciplinaria": 0,
+            "General": 0
+        };
+        
+        observations.forEach(obs => {
+            if (obs.nivel && porNivel.hasOwnProperty(obs.nivel)) {
+                porNivel[obs.nivel]++;
             }
-            if (item._id.tipo) {
-                result.porTipo[item._id.tipo] = (result.porTipo[item._id.tipo] || 0) + item.count;
+            if (obs.tipo && porTipo.hasOwnProperty(obs.tipo)) {
+                porTipo[obs.tipo]++;
             }
         });
-
+        
+        const total = observations.length;
+        
+        console.log('📊 Resumen generado:', { total, porNivel });
+        
         res.json({
             success: true,
-            data: result
+            data: {
+                total,
+                porNivel,
+                porTipo
+            }
         });
 
     } catch (error) {
