@@ -5,50 +5,110 @@ const DocenteMensajeria = ({ user }) => {
     const [activeTab, setActiveTab] = useState('recibidos');
     const [mensajes, setMensajes] = useState([]);
     const [destinatarios, setDestinatarios] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [enviando, setEnviando] = useState(false);
+    const [errorMsg, setErrorMsg] = useState('');
+    
     const [nuevoMensaje, setNuevoMensaje] = useState({
-        destinatario: '',
+        destinatarioId: '',
         asunto: '',
         contenido: ''
     });
 
     useEffect(() => {
-        fetchMensajes();
-        fetchDestinatarios();
-    }, [user, activeTab]);
+        if (activeTab === 'recibidos' || activeTab === 'enviados') {
+            fetchMensajes();
+        }
+        if (activeTab === 'nuevo') {
+            fetchDestinatarios();
+        }
+    }, [activeTab]);
 
     const fetchMensajes = async () => {
         try {
+            setLoading(true);
             const token = localStorage.getItem('token');
+            
+            if (!token) {
+                setErrorMsg('No hay sesión activa');
+                setLoading(false);
+                return;
+            }
+
             const endpoint = activeTab === 'recibidos' 
-                ? `http://localhost:5000/api/messages/recibidos/${user.id}`
-                : `http://localhost:5000/api/messages/enviados/${user.id}`;
+                ? `http://localhost:5000/api/messages/received/${user.id}`
+                : `http://localhost:5000/api/messages/sent/${user.id}`;
             
             const response = await fetch(endpoint, {
                 headers: { 'Authorization': `Bearer ${token}` }
             });
+            
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            
             const data = await response.json();
-            setMensajes(data.data || []);
+            setMensajes(Array.isArray(data) ? data : []);
         } catch (error) {
             console.error('Error:', error);
+            setErrorMsg(error.message);
+        } finally {
+            setLoading(false);
         }
     };
 
+    // ✅ CORREGIDO: Usar el endpoint correcto para docentes
     const fetchDestinatarios = async () => {
         try {
+            setLoading(true);
+            setErrorMsg('');
             const token = localStorage.getItem('token');
-            // Obtener acudientes y directivos
-            const response = await fetch('http://localhost:5000/api/users?roles=acudiente,directivo', {
-                headers: { 'Authorization': `Bearer ${token}` }
+            
+            if (!token) {
+                setErrorMsg('No hay sesión activa. Por favor inicie sesión nuevamente.');
+                setLoading(false);
+                return;
+            }
+
+            console.log('🔍 Buscando destinatarios para docente...');
+            
+            const response = await fetch('http://localhost:5000/api/users/destinatarios-docente', {
+                headers: { 
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                }
             });
+            
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            
             const data = await response.json();
+            console.log('👥 Destinatarios recibidos:', data);
+            
             setDestinatarios(data.users || []);
+            
+            if (data.users?.length === 0) {
+                setErrorMsg('No hay acudientes o directivos disponibles para contactar.');
+            }
+            
         } catch (error) {
-            console.error('Error:', error);
+            console.error('❌ Error fetching destinatarios:', error);
+            setErrorMsg(error.message);
+        } finally {
+            setLoading(false);
         }
     };
 
     const handleEnviarMensaje = async (e) => {
         e.preventDefault();
+        
+        if (!nuevoMensaje.destinatarioId || !nuevoMensaje.asunto || !nuevoMensaje.contenido) {
+            alert('Por favor complete todos los campos');
+            return;
+        }
+
+        setEnviando(true);
         try {
             const token = localStorage.getItem('token');
             const response = await fetch('http://localhost:5000/api/messages', {
@@ -59,33 +119,76 @@ const DocenteMensajeria = ({ user }) => {
                 },
                 body: JSON.stringify({
                     remitenteId: user.id,
-                    destinatarioId: nuevoMensaje.destinatario,
+                    destinatarioId: nuevoMensaje.destinatarioId,
                     asunto: nuevoMensaje.asunto,
                     contenido: nuevoMensaje.contenido
                 })
             });
 
             if (response.ok) {
-                alert('Mensaje enviado');
-                setNuevoMensaje({ destinatario: '', asunto: '', contenido: '' });
+                alert('✅ Mensaje enviado exitosamente');
+                setNuevoMensaje({ destinatarioId: '', asunto: '', contenido: '' });
                 setActiveTab('enviados');
+            } else {
+                const error = await response.json();
+                alert(`❌ Error: ${error.message || 'No se pudo enviar el mensaje'}`);
             }
+        } catch (error) {
+            console.error('Error:', error);
+            alert('❌ Error de conexión con el servidor');
+        } finally {
+            setEnviando(false);
+        }
+    };
+
+    const formatDate = (dateString) => {
+        const date = new Date(dateString);
+        return date.toLocaleString('es-ES', {
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit'
+        });
+    };
+
+    const marcarComoLeido = async (messageId) => {
+        try {
+            const token = localStorage.getItem('token');
+            await fetch(`http://localhost:5000/api/messages/read/${messageId}`, {
+                method: 'PUT',
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            fetchMensajes();
         } catch (error) {
             console.error('Error:', error);
         }
     };
 
+    if (loading && activeTab !== 'nuevo') {
+        return <div style={styles.loading}>Cargando mensajes...</div>;
+    }
+
     return (
         <div style={styles.container}>
-            <h2 style={styles.title}>Mensajería Interna</h2>
-            <p style={styles.subtitle}>Comuníquese con acudientes y directivos</p>
+            <h2 style={styles.pageTitle}>Mensajería Interna</h2>
+            <p style={styles.pageSubtitle}>Comuníquese con acudientes y directivos</p>
 
-            <div style={styles.tabContainer}>
+            {errorMsg && (
+                <div style={styles.errorMsg}>
+                    ⚠️ {errorMsg}
+                    {activeTab === 'nuevo' && (
+                        <button onClick={fetchDestinatarios} style={styles.retryBtn}>Reintentar</button>
+                    )}
+                </div>
+            )}
+
+            <div style={styles.tabsContainer}>
                 <button 
                     style={{...styles.tab, ...(activeTab === 'recibidos' && styles.activeTab)}}
                     onClick={() => setActiveTab('recibidos')}
                 >
-                    Recibidos
+                    Recibidos ({mensajes.filter(m => !m.leido).length})
                 </button>
                 <button 
                     style={{...styles.tab, ...(activeTab === 'enviados' && styles.activeTab)}}
@@ -101,22 +204,32 @@ const DocenteMensajeria = ({ user }) => {
                 </button>
             </div>
 
-            <div style={styles.content}>
+            <div style={styles.contentCard}>
                 {activeTab === 'recibidos' && (
-                    <div style={styles.messageList}>
+                    <div style={styles.mensajesList}>
                         {mensajes.length === 0 ? (
-                            <p style={styles.emptyMessage}>No hay mensajes recibidos</p>
+                            <div style={styles.emptyState}>
+                                <p>📭 No hay mensajes recibidos</p>
+                            </div>
                         ) : (
-                            mensajes.map(msg => (
-                                <div key={msg._id} style={styles.messageCard}>
-                                    <div style={styles.messageHeader}>
-                                        <strong>{msg.remitente}</strong>
-                                        <span style={styles.messageDate}>
-                                            {new Date(msg.fecha).toLocaleString()}
+                            mensajes.map((msg) => (
+                                <div 
+                                    key={msg._id} 
+                                    style={{
+                                        ...styles.mensajeItem,
+                                        backgroundColor: msg.leido ? '#f8f9fa' : '#fff3e0'
+                                    }}
+                                    onClick={() => !msg.leido && marcarComoLeido(msg._id)}
+                                >
+                                    <div style={styles.mensajeHeader}>
+                                        <span style={styles.mensajeRemitente}>
+                                            {msg.remitenteId?.nombre || 'Remitente'}
+                                            {!msg.leido && <span style={styles.noLeidoBadge}>Nuevo</span>}
                                         </span>
+                                        <span style={styles.mensajeHora}>{formatDate(msg.fechaEnvio || msg.createdAt)}</span>
                                     </div>
-                                    <h4 style={styles.messageSubject}>{msg.asunto}</h4>
-                                    <p style={styles.messageContent}>{msg.contenido}</p>
+                                    <h4 style={styles.mensajeAsunto}>{msg.asunto}</h4>
+                                    <p style={styles.mensajePreview}>{msg.contenido}</p>
                                 </div>
                             ))
                         )}
@@ -124,20 +237,22 @@ const DocenteMensajeria = ({ user }) => {
                 )}
 
                 {activeTab === 'enviados' && (
-                    <div style={styles.messageList}>
+                    <div style={styles.mensajesList}>
                         {mensajes.length === 0 ? (
-                            <p style={styles.emptyMessage}>No hay mensajes enviados</p>
+                            <div style={styles.emptyState}>
+                                <p>📤 No hay mensajes enviados</p>
+                            </div>
                         ) : (
-                            mensajes.map(msg => (
-                                <div key={msg._id} style={styles.messageCard}>
-                                    <div style={styles.messageHeader}>
-                                        <strong>Para: {msg.destinatario}</strong>
-                                        <span style={styles.messageDate}>
-                                            {new Date(msg.fecha).toLocaleString()}
+                            mensajes.map((msg) => (
+                                <div key={msg._id} style={styles.mensajeItem}>
+                                    <div style={styles.mensajeHeader}>
+                                        <span style={styles.mensajeRemitente}>
+                                            Para: {msg.destinatarioId?.nombre || 'Destinatario'}
                                         </span>
+                                        <span style={styles.mensajeHora}>{formatDate(msg.fechaEnvio || msg.createdAt)}</span>
                                     </div>
-                                    <h4 style={styles.messageSubject}>{msg.asunto}</h4>
-                                    <p style={styles.messageContent}>{msg.contenido}</p>
+                                    <h4 style={styles.mensajeAsunto}>{msg.asunto}</h4>
+                                    <p style={styles.mensajePreview}>{msg.contenido}</p>
                                 </div>
                             ))
                         )}
@@ -145,52 +260,59 @@ const DocenteMensajeria = ({ user }) => {
                 )}
 
                 {activeTab === 'nuevo' && (
-                    <div style={styles.newMessageForm}>
-                        <form onSubmit={handleEnviarMensaje}>
-                            <div style={styles.formGroup}>
-                                <label style={styles.label}>Destinatario</label>
-                                <select
-                                    style={styles.select}
-                                    value={nuevoMensaje.destinatario}
-                                    onChange={(e) => setNuevoMensaje({...nuevoMensaje, destinatario: e.target.value})}
-                                    required
-                                >
-                                    <option value="">Seleccione destinatario</option>
-                                    {destinatarios.map(d => (
-                                        <option key={d._id} value={d._id}>
-                                            {d.nombre} ({d.rol})
-                                        </option>
-                                    ))}
-                                </select>
-                            </div>
+                    <form onSubmit={handleEnviarMensaje} style={styles.formContainer}>
+                        <div style={styles.formGroup}>
+                            <label style={styles.label}>Para *</label>
+                            <select 
+                                style={styles.select}
+                                value={nuevoMensaje.destinatarioId}
+                                onChange={(e) => setNuevoMensaje({...nuevoMensaje, destinatarioId: e.target.value})}
+                                required
+                            >
+                                <option value="">Seleccione un destinatario</option>
+                                {destinatarios.map(d => (
+                                    <option key={d._id} value={d._id}>
+                                        {d.nombre} ({d.rol === 'acudiente' ? 'Acudiente' : 'Directivo'})
+                                    </option>
+                                ))}
+                            </select>
+                            {destinatarios.length === 0 && (
+                                <p style={styles.helpText}>No hay destinatarios disponibles</p>
+                            )}
+                        </div>
 
-                            <div style={styles.formGroup}>
-                                <label style={styles.label}>Asunto</label>
-                                <input
-                                    type="text"
-                                    style={styles.input}
-                                    value={nuevoMensaje.asunto}
-                                    onChange={(e) => setNuevoMensaje({...nuevoMensaje, asunto: e.target.value})}
-                                    required
-                                />
-                            </div>
+                        <div style={styles.formGroup}>
+                            <label style={styles.label}>Asunto *</label>
+                            <input 
+                                type="text" 
+                                style={styles.input} 
+                                placeholder="Asunto del mensaje"
+                                value={nuevoMensaje.asunto}
+                                onChange={(e) => setNuevoMensaje({...nuevoMensaje, asunto: e.target.value})}
+                                required
+                            />
+                        </div>
 
-                            <div style={styles.formGroup}>
-                                <label style={styles.label}>Mensaje</label>
-                                <textarea
-                                    style={styles.textarea}
-                                    rows="5"
-                                    value={nuevoMensaje.contenido}
-                                    onChange={(e) => setNuevoMensaje({...nuevoMensaje, contenido: e.target.value})}
-                                    required
-                                />
-                            </div>
+                        <div style={styles.formGroup}>
+                            <label style={styles.label}>Mensaje *</label>
+                            <textarea 
+                                style={styles.textarea} 
+                                rows="6" 
+                                placeholder="Escriba su mensaje aquí..."
+                                value={nuevoMensaje.contenido}
+                                onChange={(e) => setNuevoMensaje({...nuevoMensaje, contenido: e.target.value})}
+                                required
+                            />
+                        </div>
 
-                            <button type="submit" style={styles.submitButton}>
-                                Enviar Mensaje
-                            </button>
-                        </form>
-                    </div>
+                        <button 
+                            type="submit" 
+                            style={styles.sendButton}
+                            disabled={enviando || destinatarios.length === 0}
+                        >
+                            {enviando ? 'Enviando...' : '📧 Enviar Mensaje'}
+                        </button>
+                    </form>
                 )}
             </div>
         </div>
@@ -198,20 +320,31 @@ const DocenteMensajeria = ({ user }) => {
 };
 
 const styles = {
-    container: {
-        padding: '20px'
+    container: { padding: '24px', maxWidth: '900px', margin: '0 auto' },
+    loading: { textAlign: 'center', padding: '50px', color: '#7f8c8d' },
+    pageTitle: { margin: '0 0 5px 0', fontSize: '28px', fontWeight: '600', color: '#2c3e50' },
+    pageSubtitle: { margin: '0 0 24px 0', fontSize: '16px', color: '#7f8c8d' },
+    
+    errorMsg: {
+        backgroundColor: '#fff5f5',
+        color: '#c53030',
+        padding: '12px 16px',
+        borderRadius: '8px',
+        marginBottom: '20px',
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center'
     },
-    title: {
-        margin: '0 0 5px 0',
-        color: '#2c3e50',
-        fontSize: '22px'
+    retryBtn: {
+        padding: '4px 12px',
+        backgroundColor: '#c53030',
+        color: 'white',
+        border: 'none',
+        borderRadius: '4px',
+        cursor: 'pointer'
     },
-    subtitle: {
-        margin: '0 0 30px 0',
-        color: '#7f8c8d',
-        fontSize: '14px'
-    },
-    tabContainer: {
+    
+    tabsContainer: {
         display: 'flex',
         gap: '10px',
         marginBottom: '20px',
@@ -219,104 +352,143 @@ const styles = {
         paddingBottom: '10px'
     },
     tab: {
-        padding: '10px 20px',
+        padding: '10px 24px',
         border: 'none',
         backgroundColor: 'transparent',
         cursor: 'pointer',
-        fontSize: '16px',
+        fontSize: '15px',
         color: '#7f8c8d',
-        borderRadius: '5px 5px 0 0'
+        borderRadius: '5px 5px 0 0',
+        transition: 'all 0.2s'
     },
     activeTab: {
         color: '#27ae60',
         borderBottom: '2px solid #27ae60',
         fontWeight: 'bold'
     },
-    content: {
+    contentCard: {
         backgroundColor: 'white',
-        borderRadius: '10px',
-        boxShadow: '0 2px 10px rgba(0,0,0,0.1)',
-        padding: '20px'
+        borderRadius: '12px',
+        boxShadow: '0 4px 12px rgba(0,0,0,0.08)',
+        padding: '24px',
+        minHeight: '400px'
     },
-    messageList: {
+    mensajesList: {
         display: 'flex',
         flexDirection: 'column',
         gap: '15px'
     },
-    messageCard: {
-        padding: '15px',
-        backgroundColor: '#f8f9fa',
-        borderRadius: '5px',
-        borderLeft: '3px solid #27ae60'
+    mensajeItem: {
+        padding: '16px',
+        backgroundColor: '#f8fafc',
+        borderRadius: '12px',
+        cursor: 'pointer',
+        transition: 'all 0.2s',
+        border: '1px solid #e2e8f0'
     },
-    messageHeader: {
+    mensajeHeader: {
         display: 'flex',
         justifyContent: 'space-between',
-        marginBottom: '10px'
+        alignItems: 'center',
+        marginBottom: '8px',
+        flexWrap: 'wrap',
+        gap: '8px'
     },
-    messageDate: {
-        color: '#7f8c8d',
-        fontSize: '12px'
+    mensajeRemitente: {
+        fontWeight: '600',
+        color: '#2d3748',
+        display: 'flex',
+        alignItems: 'center',
+        gap: '8px'
     },
-    messageSubject: {
-        margin: '10px 0',
+    noLeidoBadge: {
+        fontSize: '10px',
+        backgroundColor: '#f39c12',
+        color: 'white',
+        padding: '2px 8px',
+        borderRadius: '20px'
+    },
+    mensajeAsunto: {
+        margin: '8px 0',
+        fontSize: '16px',
+        fontWeight: '600',
         color: '#2c3e50'
     },
-    messageContent: {
+    mensajeHora: {
+        fontSize: '12px',
+        color: '#718096'
+    },
+    mensajePreview: {
         margin: 0,
-        color: '#2c3e50',
+        color: '#4a5568',
+        fontSize: '14px',
         lineHeight: '1.5'
     },
-    newMessageForm: {
-        maxWidth: '600px'
+    emptyState: {
+        display: 'flex',
+        justifyContent: 'center',
+        alignItems: 'center',
+        height: '300px',
+        color: '#a0aec0',
+        fontSize: '16px'
+    },
+    formContainer: {
+        maxWidth: '100%'
     },
     formGroup: {
         marginBottom: '20px'
     },
     label: {
         display: 'block',
-        marginBottom: '5px',
-        fontWeight: 'bold',
-        color: '#2c3e50'
+        marginBottom: '8px',
+        fontWeight: '600',
+        color: '#2c3e50',
+        fontSize: '14px'
     },
     select: {
         width: '100%',
-        padding: '10px',
-        border: '1px solid #bdc3c7',
-        borderRadius: '5px',
-        fontSize: '14px'
+        padding: '12px',
+        border: '1px solid #e2e8f0',
+        borderRadius: '8px',
+        fontSize: '14px',
+        backgroundColor: 'white'
     },
     input: {
         width: '100%',
-        padding: '10px',
-        border: '1px solid #bdc3c7',
-        borderRadius: '5px',
-        fontSize: '14px'
+        padding: '12px',
+        border: '1px solid #e2e8f0',
+        borderRadius: '8px',
+        fontSize: '14px',
+        boxSizing: 'border-box'
     },
     textarea: {
         width: '100%',
-        padding: '10px',
-        border: '1px solid #bdc3c7',
-        borderRadius: '5px',
+        padding: '12px',
+        border: '1px solid #e2e8f0',
+        borderRadius: '8px',
         fontSize: '14px',
         fontFamily: 'inherit',
-        resize: 'vertical'
+        resize: 'vertical',
+        boxSizing: 'border-box'
     },
-    submitButton: {
-        width: '100%',
-        padding: '12px',
+    helpText: {
+        marginTop: '4px',
+        fontSize: '12px',
+        color: '#e74c3c'
+    },
+    sendButton: {
+        padding: '12px 24px',
         backgroundColor: '#27ae60',
         color: 'white',
         border: 'none',
-        borderRadius: '5px',
+        borderRadius: '8px',
+        cursor: 'pointer',
         fontSize: '16px',
-        fontWeight: 'bold',
-        cursor: 'pointer'
-    },
-    emptyMessage: {
-        textAlign: 'center',
-        color: '#95a5a6',
-        padding: '40px'
+        fontWeight: '600',
+        transition: 'all 0.2s',
+        ':hover': {
+            backgroundColor: '#219a52'
+        }
     }
 };
 

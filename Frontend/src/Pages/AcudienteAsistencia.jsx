@@ -59,15 +59,30 @@ const AcudienteAsistencia = ({ user }) => {
         return date.toLocaleDateString('es-ES', { year: 'numeric', month: '2-digit', day: '2-digit' });
     };
 
+    // 🔥 CORREGIDO: Mostrar el motivo real
     const getEstadoTexto = (item) => {
         if (item.estado === 'presente') return 'Llegó puntual';
         if (item.estado === 'tarde') return 'Llegó 15 min tarde';
         if (item.estado === 'ausente') {
-            if (item.motivo === 'enfermedad') return 'Cita médica';
-            if (item.motivo === 'permiso') return 'Permiso';
-            return 'Ausente';
+            // Mostrar el motivo real como aparece en la BD
+            const motivos = {
+                'enfermedad': 'Enfermedad',
+                'permiso': 'Permiso',
+                'sin_justificar': 'Sin justificar',
+                'otro': 'Otro'
+            };
+            return motivos[item.motivo] || 'Ausente';
         }
         return '';
+    };
+
+    const getBadgeEstado = (estado) => {
+        switch(estado) {
+            case 'presente': return { bg: '#27ae60', text: 'Presente' };
+            case 'tarde': return { bg: '#f39c12', text: 'Tardanza' };
+            case 'ausente': return { bg: '#e74c3c', text: 'Ausente' };
+            default: return { bg: '#95a5a6', text: 'Sin registrar' };
+        }
     };
 
     if (loading) return <div style={styles.loading}>Cargando...</div>;
@@ -75,7 +90,7 @@ const AcudienteAsistencia = ({ user }) => {
     if (error) {
         return (
             <div style={styles.container}>
-                <h2 style={styles.pageTitle}>Control de Asistencia</h2>
+                <h2 style={styles.pageTitle}>Consulta de Asistencia</h2>
                 <p style={styles.pageSubtitle}>Consulte el registro de asistencia de sus hijos</p>
                 <div style={styles.errorBox}>
                     <p>{error}</p>
@@ -88,7 +103,7 @@ const AcudienteAsistencia = ({ user }) => {
     if (!hijo) {
         return (
             <div style={styles.container}>
-                <h2 style={styles.pageTitle}>Control de Asistencia</h2>
+                <h2 style={styles.pageTitle}>Consulta de Asistencia</h2>
                 <p style={styles.pageSubtitle}>Consulte el registro de asistencia de sus hijos</p>
                 <div style={styles.emptyState}>
                     <p>No hay información disponible</p>
@@ -99,10 +114,10 @@ const AcudienteAsistencia = ({ user }) => {
 
     return (
         <div style={styles.container}>
-            <h2 style={styles.pageTitle}>Control de Asistencia</h2>
+            <h2 style={styles.pageTitle}>Consulta de Asistencia</h2>
             <p style={styles.pageSubtitle}>Consulte el registro de asistencia de sus hijos</p>
 
-            {/* Estudiante - IGUAL QUE EN LA IMAGEN */}
+            {/* Estudiante */}
             <div style={styles.estudianteContainer}>
                 <strong>Estudiante</strong>
                 <div style={styles.estudianteNombre}>
@@ -117,24 +132,25 @@ const AcudienteAsistencia = ({ user }) => {
                     {asistencias.length === 0 ? (
                         <p style={styles.emptyMessage}>No hay registros de asistencia</p>
                     ) : (
-                        asistencias.map((item, index) => (
-                            <div key={index} style={styles.asistenciaItem}>
-                                <div style={styles.asistenciaInfo}>
-                                    <span style={styles.asistenciaFecha}>{formatDate(item.fecha)}</span>
-                                    <span style={styles.asistenciaEstado}>
-                                        {getEstadoTexto(item)}
+                        asistencias.map((item, index) => {
+                            const badge = getBadgeEstado(item.estado);
+                            return (
+                                <div key={index} style={styles.asistenciaItem}>
+                                    <div style={styles.asistenciaInfo}>
+                                        <span style={styles.asistenciaFecha}>{formatDate(item.fecha)}</span>
+                                        <span style={styles.asistenciaEstado}>
+                                            {getEstadoTexto(item)}
+                                        </span>
+                                    </div>
+                                    <span style={{
+                                        ...styles.estadoBadge,
+                                        backgroundColor: badge.bg
+                                    }}>
+                                        {badge.text}
                                     </span>
                                 </div>
-                                <span style={{
-                                    ...styles.estadoBadge,
-                                    backgroundColor: item.estado === 'presente' ? '#27ae60' :
-                                                    item.estado === 'tarde' ? '#f39c12' : '#e74c3c'
-                                }}>
-                                    {item.estado === 'presente' ? 'Presente' :
-                                     item.estado === 'tarde' ? 'Tardanza' : 'Ausente'}
-                                </span>
-                            </div>
-                        ))
+                            );
+                        })
                     )}
                 </div>
             </div>
@@ -143,34 +159,35 @@ const AcudienteAsistencia = ({ user }) => {
 };
 
 const styles = {
-    container: { padding: '20px', maxWidth: '900px', margin: '0 auto' },
+    container: { padding: '24px', maxWidth: '900px', margin: '0 auto' },
     loading: { textAlign: 'center', padding: '50px' },
-    pageTitle: { margin: '0 0 5px 0', fontSize: '24px', color: '#2c3e50' },
-    pageSubtitle: { margin: '0 0 20px 0', fontSize: '14px', color: '#7f8c8d' },
+    pageTitle: { margin: '0 0 5px 0', fontSize: '28px', fontWeight: '600', color: '#2c3e50' },
+    pageSubtitle: { margin: '0 0 24px 0', fontSize: '16px', color: '#7f8c8d' },
     
     estudianteContainer: {
         backgroundColor: '#f8f9fa',
-        padding: '15px',
-        borderRadius: '8px',
-        marginBottom: '20px',
+        padding: '16px 20px',
+        borderRadius: '12px',
+        marginBottom: '24px',
         border: '1px solid #e0e0e0'
     },
     estudianteNombre: {
-        fontSize: '16px',
-        fontWeight: '500',
+        fontSize: '18px',
+        fontWeight: '600',
         color: '#2c3e50',
-        marginTop: '5px'
+        marginTop: '6px'
     },
     
     section: {
         backgroundColor: 'white',
-        borderRadius: '8px',
-        boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+        borderRadius: '12px',
+        boxShadow: '0 4px 12px rgba(0,0,0,0.08)',
         padding: '20px'
     },
     sectionTitle: {
-        margin: '0 0 15px 0',
+        margin: '0 0 20px 0',
         fontSize: '18px',
+        fontWeight: '600',
         color: '#2c3e50',
         borderBottom: '2px solid #27ae60',
         paddingBottom: '8px'
@@ -185,50 +202,54 @@ const styles = {
     },
     asistenciaInfo: {
         display: 'flex',
-        flexDirection: 'column'
+        flexDirection: 'column',
+        gap: '4px'
     },
     asistenciaFecha: {
-        fontWeight: '500',
-        color: '#2c3e50'
+        fontWeight: '600',
+        color: '#2d3748'
     },
     asistenciaEstado: {
         fontSize: '13px',
-        color: '#7f8c8d'
+        color: '#718096'
     },
     estadoBadge: {
-        padding: '4px 10px',
-        borderRadius: '15px',
+        padding: '4px 12px',
+        borderRadius: '20px',
         color: 'white',
         fontSize: '12px',
-        fontWeight: 'bold'
+        fontWeight: '600',
+        minWidth: '80px',
+        textAlign: 'center'
     },
     
     errorBox: {
-        backgroundColor: '#f8d7da',
-        color: '#721c24',
-        padding: '20px',
-        borderRadius: '8px',
+        backgroundColor: '#fff5f5',
+        color: '#c53030',
+        padding: '24px',
+        borderRadius: '12px',
         textAlign: 'center',
-        marginBottom: '20px'
+        border: '1px solid #feb2b2'
     },
     retryButton: {
         padding: '8px 20px',
         backgroundColor: '#27ae60',
         color: 'white',
         border: 'none',
-        borderRadius: '5px',
+        borderRadius: '8px',
         cursor: 'pointer',
         marginTop: '10px'
     },
     emptyMessage: {
         textAlign: 'center',
-        color: '#95a5a6',
-        padding: '30px'
+        color: '#a0aec0',
+        padding: '40px',
+        fontSize: '14px'
     },
     emptyState: {
         textAlign: 'center',
-        color: '#95a5a6',
-        padding: '50px'
+        color: '#a0aec0',
+        padding: '60px'
     }
 };
 

@@ -342,7 +342,7 @@ function App() {
         let content;
         switch(activeDocenteSection) {
             case 'dashboard':
-                content = <DocenteDashboard user={user} />;
+                content = <DocenteDashboard user={user} setActiveSection={setActiveDocenteSection} />;
                 break;
             case 'inasistencias':
                 content = <DocenteInasistencias user={user} />;
@@ -357,7 +357,7 @@ function App() {
                 content = <DocenteMensajeria user={user} />;
                 break;
             default:
-                content = <DocenteDashboard user={user} />;
+                content = <DocenteDashboard user={user} setActiveSection={setActiveDocenteSection} />;
         }
 
         return (

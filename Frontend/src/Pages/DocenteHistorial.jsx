@@ -13,21 +13,55 @@ const DocenteHistorial = ({ user }) => {
 
     const fetchHistorial = async () => {
         try {
+            setLoading(true);
             const token = localStorage.getItem('token');
             
-            // Obtener inasistencias
-            const attendanceRes = await fetch(`http://localhost:5000/api/attendance/docente/${user.id}?limit=50`, {
+            // Obtener inasistencias del docente (con los estudiantes poblados)
+            const attendanceRes = await fetch(`http://localhost:5000/api/attendance/docente/${user.id}?limit=100`, {
                 headers: { 'Authorization': `Bearer ${token}` }
             });
             const attendanceData = await attendanceRes.json();
-            setInasistencias(attendanceData.data || []);
+            
+            // Procesar las inasistencias para extraer los datos del estudiante
+            const processedInasistencias = (attendanceData.data || []).map(item => {
+                // studentId puede ser un objeto (si está poblado) o un string
+                const student = item.studentId || {};
+                return {
+                    _id: item._id,
+                    estudiante: student.apellido1 || student.apellido || 'Estudiante',
+                    curso: student.grado_especifico || student.grado || '',
+                    fecha: item.fecha,
+                    estado: item.estado,
+                    motivo: item.motivo,
+                    observacion: item.observacion,
+                    justificada: item.motivo && item.motivo !== ''
+                };
+            });
+            
+            setInasistencias(processedInasistencias);
 
-            // Obtener observaciones
+            // Obtener observaciones del docente (con los estudiantes poblados)
             const obsRes = await fetch(`http://localhost:5000/api/observations/docente/${user.id}?limit=50`, {
                 headers: { 'Authorization': `Bearer ${token}` }
             });
             const obsData = await obsRes.json();
-            setObservaciones(obsData.data || []);
+            
+            // Procesar las observaciones para extraer los datos del estudiante
+            const processedObservaciones = (obsData.data || []).map(item => {
+                const student = item.studentId || {};
+                return {
+                    _id: item._id,
+                    estudiante: student.apellido1 || student.apellido || 'Estudiante',
+                    curso: student.grado_especifico || student.grado || '',
+                    fecha: item.fecha,
+                    tipo: item.tipo,
+                    nivel: item.nivel,
+                    descripcion: item.descripcion,
+                    planMejora: item.planMejora
+                };
+            });
+            
+            setObservaciones(processedObservaciones);
 
         } catch (error) {
             console.error('Error:', error);
@@ -39,8 +73,40 @@ const DocenteHistorial = ({ user }) => {
     const formatDate = (dateString) => {
         if (!dateString) return '';
         const date = new Date(dateString);
-        return date.toLocaleDateString('es-ES');
+        return date.toLocaleDateString('es-ES', { year: 'numeric', month: '2-digit', day: '2-digit' });
     };
+
+    const getEstadoTexto = (estado) => {
+        switch(estado) {
+            case 'presente': return 'Presente';
+            case 'ausente': return 'Ausente';
+            case 'tarde': return 'Tardanza';
+            default: return '';
+        }
+    };
+
+    const getMotivoTexto = (motivo) => {
+        const motivos = {
+            'enfermedad': 'Enfermedad',
+            'permiso': 'Permiso',
+            'sin_justificar': 'Sin justificar',
+            'otro': 'Otro'
+        };
+        return motivos[motivo] || motivo;
+    };
+
+    const getNivelInfo = (nivel) => {
+        switch(nivel) {
+            case 'Tipo I': return { color: '#27ae60', texto: 'Tipo I' };
+            case 'Tipo II': return { color: '#f39c12', texto: 'Tipo II' };
+            case 'Tipo III': return { color: '#e74c3c', texto: 'Tipo III' };
+            default: return { color: '#95a5a6', texto: nivel };
+        }
+    };
+
+    if (loading) {
+        return <div style={styles.loading}>Cargando historial...</div>;
+    }
 
     return (
         <div style={styles.container}>
@@ -52,56 +118,61 @@ const DocenteHistorial = ({ user }) => {
                     style={{...styles.tab, ...(activeTab === 'inasistencias' && styles.activeTab)}}
                     onClick={() => setActiveTab('inasistencias')}
                 >
-                    Inasistencias
+                    Inasistencias ({inasistencias.length})
                 </button>
                 <button 
                     style={{...styles.tab, ...(activeTab === 'observaciones' && styles.activeTab)}}
                     onClick={() => setActiveTab('observaciones')}
                 >
-                    Observaciones
+                    Observaciones ({observaciones.length})
                 </button>
             </div>
 
-            {loading ? (
-                <p>Cargando...</p>
-            ) : (
-                <div style={styles.content}>
-                    {activeTab === 'inasistencias' && (
-                        <div style={styles.list}>
-                            {inasistencias.length === 0 ? (
-                                <p style={styles.emptyMessage}>No hay inasistencias registradas</p>
-                            ) : (
-                                inasistencias.map((item, index) => (
-                                    <div key={index} style={styles.listItem}>
-                                        <div style={styles.itemMain}>
-                                            <strong>{item.estudiante || 'Estudiante'}</strong>
-                                            <span style={styles.itemCurso}>{item.curso || ''}</span>
-                                            <span style={styles.itemDate}>
-                                                {formatDate(item.fecha)}
-                                            </span>
-                                        </div>
-                                        <span style={{
-                                            ...styles.badge,
-                                            backgroundColor: item.justificada ? '#27ae60' : '#e74c3c'
-                                        }}>
-                                            {item.justificada ? 'Justificada' : 'Sin justificar'}
+            <div style={styles.content}>
+                {activeTab === 'inasistencias' && (
+                    <div style={styles.list}>
+                        {inasistencias.length === 0 ? (
+                            <p style={styles.emptyMessage}>No hay inasistencias registradas</p>
+                        ) : (
+                            inasistencias.map((item) => (
+                                <div key={item._id} style={styles.listItem}>
+                                    <div style={styles.itemMain}>
+                                        <strong style={styles.studentName}>{item.estudiante}</strong>
+                                        <span style={styles.itemCurso}>{item.curso}</span>
+                                        <span style={styles.itemDate}>
+                                            {formatDate(item.fecha)}
                                         </span>
+                                        {item.motivo && (
+                                            <span style={styles.motivoText}>
+                                                {getMotivoTexto(item.motivo)}
+                                            </span>
+                                        )}
                                     </div>
-                                ))
-                            )}
-                        </div>
-                    )}
+                                    <span style={{
+                                        ...styles.badge,
+                                        backgroundColor: item.estado === 'presente' ? '#27ae60' :
+                                                        item.estado === 'tarde' ? '#f39c12' : '#e74c3c'
+                                    }}>
+                                        {getEstadoTexto(item.estado)}
+                                    </span>
+                                </div>
+                            ))
+                        )}
+                    </div>
+                )}
 
-                    {activeTab === 'observaciones' && (
-                        <div style={styles.list}>
-                            {observaciones.length === 0 ? (
-                                <p style={styles.emptyMessage}>No hay observaciones registradas</p>
-                            ) : (
-                                observaciones.map((item, index) => (
-                                    <div key={index} style={styles.listItem}>
+                {activeTab === 'observaciones' && (
+                    <div style={styles.list}>
+                        {observaciones.length === 0 ? (
+                            <p style={styles.emptyMessage}>No hay observaciones registradas</p>
+                        ) : (
+                            observaciones.map((item) => {
+                                const nivelInfo = getNivelInfo(item.nivel);
+                                return (
+                                    <div key={item._id} style={styles.listItem}>
                                         <div style={styles.itemMain}>
-                                            <strong>{item.estudiante || 'Estudiante'}</strong>
-                                            <span style={styles.itemCurso}>{item.curso || ''}</span>
+                                            <strong style={styles.studentName}>{item.estudiante}</strong>
+                                            <span style={styles.itemCurso}>{item.curso}</span>
                                             <span style={styles.itemDate}>
                                                 {formatDate(item.fecha)}
                                             </span>
@@ -113,34 +184,45 @@ const DocenteHistorial = ({ user }) => {
                                             }}>
                                                 {item.tipo || 'General'}
                                             </span>
-                                            <span style={styles.itemNivel}>
-                                                {item.nivel || 'N/A'}
+                                            <span style={{
+                                                ...styles.nivelBadge,
+                                                backgroundColor: nivelInfo.color
+                                            }}>
+                                                {nivelInfo.texto}
                                             </span>
                                         </div>
                                     </div>
-                                ))
-                            )}
-                        </div>
-                    )}
-                </div>
-            )}
+                                );
+                            })
+                        )}
+                    </div>
+                )}
+            </div>
         </div>
     );
 };
 
 const styles = {
     container: {
-        padding: '20px'
+        padding: '24px',
+        maxWidth: '1000px',
+        margin: '0 auto'
+    },
+    loading: {
+        textAlign: 'center',
+        padding: '50px',
+        color: '#7f8c8d'
     },
     title: {
         margin: '0 0 5px 0',
         color: '#2c3e50',
-        fontSize: '22px'
+        fontSize: '28px',
+        fontWeight: '600'
     },
     subtitle: {
         margin: '0 0 30px 0',
         color: '#7f8c8d',
-        fontSize: '14px'
+        fontSize: '16px'
     },
     tabContainer: {
         display: 'flex',
@@ -156,7 +238,8 @@ const styles = {
         cursor: 'pointer',
         fontSize: '16px',
         color: '#7f8c8d',
-        borderRadius: '5px 5px 0 0'
+        borderRadius: '5px 5px 0 0',
+        transition: 'all 0.2s'
     },
     activeTab: {
         color: '#27ae60',
@@ -165,36 +248,54 @@ const styles = {
     },
     content: {
         backgroundColor: 'white',
-        borderRadius: '10px',
-        boxShadow: '0 2px 10px rgba(0,0,0,0.1)',
+        borderRadius: '12px',
+        boxShadow: '0 4px 12px rgba(0,0,0,0.08)',
         padding: '20px'
     },
     list: {
         display: 'flex',
         flexDirection: 'column',
-        gap: '10px'
+        gap: '12px'
     },
     listItem: {
         display: 'flex',
         justifyContent: 'space-between',
         alignItems: 'center',
         padding: '15px',
-        backgroundColor: '#f8f9fa',
-        borderRadius: '5px',
-        borderLeft: '3px solid #27ae60'
+        backgroundColor: '#f8fafc',
+        borderRadius: '8px',
+        borderLeft: '3px solid #27ae60',
+        flexWrap: 'wrap',
+        gap: '10px'
     },
     itemMain: {
         display: 'flex',
         gap: '15px',
-        alignItems: 'center'
+        alignItems: 'center',
+        flexWrap: 'wrap'
+    },
+    studentName: {
+        color: '#2d3748',
+        fontSize: '14px'
     },
     itemCurso: {
-        color: '#7f8c8d',
-        fontSize: '13px'
+        color: '#718096',
+        fontSize: '12px',
+        backgroundColor: '#e2e8f0',
+        padding: '2px 8px',
+        borderRadius: '20px'
     },
     itemDate: {
-        color: '#7f8c8d',
+        color: '#718096',
         fontSize: '12px'
+    },
+    motivoText: {
+        fontSize: '11px',
+        color: '#718096',
+        fontStyle: 'italic',
+        backgroundColor: '#edf2f7',
+        padding: '2px 8px',
+        borderRadius: '20px'
     },
     itemDetails: {
         display: 'flex',
@@ -202,28 +303,32 @@ const styles = {
         alignItems: 'center'
     },
     badge: {
-        padding: '3px 8px',
-        borderRadius: '12px',
+        padding: '4px 12px',
+        borderRadius: '20px',
         color: 'white',
-        fontSize: '11px',
-        fontWeight: 'bold'
+        fontSize: '12px',
+        fontWeight: '600'
     },
     tipoBadge: {
-        padding: '3px 8px',
-        borderRadius: '12px',
+        padding: '4px 12px',
+        borderRadius: '20px',
         color: 'white',
-        fontSize: '11px',
-        fontWeight: 'bold'
+        fontSize: '12px',
+        fontWeight: '600'
     },
-    itemNivel: {
-        color: '#2c3e50',
-        fontSize: '12px'
+    nivelBadge: {
+        padding: '4px 12px',
+        borderRadius: '20px',
+        color: 'white',
+        fontSize: '12px',
+        fontWeight: '600'
     },
     emptyMessage: {
         textAlign: 'center',
-        color: '#95a5a6',
-        padding: '40px'
+        color: '#a0aec0',
+        padding: '40px',
+        fontSize: '14px'
     }
 };
 
-export default DocenteHistorial;
+export default DocenteHistorial;    

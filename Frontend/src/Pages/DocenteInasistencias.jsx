@@ -6,15 +6,34 @@ const DocenteInasistencias = ({ user }) => {
     const [estudiantes, setEstudiantes] = useState([]);
     const [selectedCurso, setSelectedCurso] = useState('');
     const [selectedEstudiante, setSelectedEstudiante] = useState('');
-    const [loading, setLoading] = useState(true);
     const [asistenciasHoy, setAsistenciasHoy] = useState([]);
+    const [loading, setLoading] = useState(true);
+    
+    // Estados para el modal de motivo
+    const [showMotivoModal, setShowMotivoModal] = useState(false);
+    const [currentStudent, setCurrentStudent] = useState(null);
+    const [currentEstado, setCurrentEstado] = useState('');
+    const [motivoData, setMotivoData] = useState({
+        motivo: 'enfermedad',
+        observacion: ''
+    });
+
+    // Obtener fecha actual en formato YYYY-MM-DD
+    const today = new Date().toISOString().split('T')[0];
 
     useEffect(() => {
-        fetchCursos();
-        fetchAsistenciasHoy();
+        if (user?.id) {
+            fetchCursosYEstudiantes();
+        }
     }, [user]);
 
-    const fetchCursos = async () => {
+    useEffect(() => {
+        if (selectedCurso) {
+            fetchAsistenciasHoy();
+        }
+    }, [selectedCurso, today]);
+
+    const fetchCursosYEstudiantes = async () => {
         try {
             const token = localStorage.getItem('token');
             const response = await fetch(`http://localhost:5000/api/students/docente/${user.id}`, {
@@ -22,10 +41,12 @@ const DocenteInasistencias = ({ user }) => {
             });
             const data = await response.json();
             
-            // Extraer cursos únicos
-            const uniqueCursos = [...new Set(data.data.map(e => e.grado_especifico))];
-            setCursos(uniqueCursos);
-            setEstudiantes(data.data);
+            if (data.success) {
+                // Obtener cursos únicos
+                const uniqueCursos = [...new Set(data.data.map(e => e.grado_especifico))];
+                setCursos(uniqueCursos);
+                setEstudiantes(data.data);
+            }
         } catch (error) {
             console.error('Error:', error);
         } finally {
@@ -36,38 +57,13 @@ const DocenteInasistencias = ({ user }) => {
     const fetchAsistenciasHoy = async () => {
         try {
             const token = localStorage.getItem('token');
-            const hoy = new Date().toISOString().split('T')[0];
-            const response = await fetch(`http://localhost:5000/api/attendance/docente/${user.id}?fecha=${hoy}`, {
+            const response = await fetch(`http://localhost:5000/api/attendance?date=${today}`, {
                 headers: { 'Authorization': `Bearer ${token}` }
             });
             const data = await response.json();
-            setAsistenciasHoy(data.data || []);
-        } catch (error) {
-            console.error('Error:', error);
-        }
-    };
-
-    const marcarAsistencia = async (estudianteId, estado) => {
-        try {
-            const token = localStorage.getItem('token');
-            const hoy = new Date().toISOString().split('T')[0];
             
-            const response = await fetch('http://localhost:5000/api/attendance', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${token}`
-                },
-                body: JSON.stringify({
-                    studentId: estudianteId,
-                    fecha: hoy,
-                    estado,
-                    registradoPor: user.id
-                })
-            });
-            
-            if (response.ok) {
-                fetchAsistenciasHoy();
+            if (data.success) {
+                setAsistenciasHoy(data.attendance || []);
             }
         } catch (error) {
             console.error('Error:', error);
@@ -78,21 +74,124 @@ const DocenteInasistencias = ({ user }) => {
         ? estudiantes.filter(e => e.grado_especifico === selectedCurso)
         : [];
 
+    const getStudentAttendance = (studentId) => {
+        const record = asistenciasHoy.find(a => a.studentId?._id === studentId || a.studentId === studentId);
+        return record?.estado || 'sin-registrar';
+    };
+
+    const handleAttendanceClick = (student, estado) => {
+        if (estado === 'presente') {
+            // Presente no necesita motivo
+            registerAttendance(student._id, estado, '', '');
+        } else {
+            // Ausente o Tardanza necesitan motivo
+            setCurrentStudent(student);
+            setCurrentEstado(estado);
+            setMotivoData({ motivo: 'enfermedad', observacion: '' });
+            setShowMotivoModal(true);
+        }
+    };
+
+    const registerAttendance = async (studentId, estado, motivo, observacion) => {
+        try {
+            const token = localStorage.getItem('token');
+            const response = await fetch('http://localhost:5000/api/attendance', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                },
+                body: JSON.stringify({
+                    studentId,
+                    fecha: today,
+                    estado,
+                    motivo: motivo || '',
+                    observacion: observacion || '',
+                    registradoPor: user.id
+                })
+            });
+
+            if (response.ok) {
+                await fetchAsistenciasHoy();
+                return true;
+            }
+            return false;
+        } catch (error) {
+            console.error('Error:', error);
+            return false;
+        }
+    };
+
+    const handleMotivoSubmit = async () => {
+        if (currentStudent && currentEstado) {
+            const success = await registerAttendance(
+                currentStudent._id,
+                currentEstado,
+                motivoData.motivo,
+                motivoData.observacion
+            );
+            
+            if (success) {
+                setShowMotivoModal(false);
+                setCurrentStudent(null);
+                setCurrentEstado('');
+            } else {
+                alert('Error al registrar la asistencia');
+            }
+        }
+    };
+
+    const getEstadoBadge = (estado) => {
+        switch(estado) {
+            case 'presente':
+                return { bg: '#27ae60', text: 'Presente' };
+            case 'ausente':
+                return { bg: '#e74c3c', text: 'Ausente' };
+            case 'tarde':
+                return { bg: '#f39c12', text: 'Tardanza' };
+            default:
+                return { bg: '#95a5a6', text: 'Sin registrar' };
+        }
+    };
+
+    const getEstadoTexto = (estado) => {
+        switch(estado) {
+            case 'presente': return 'Llegó puntual';
+            case 'tarde': return 'Llegó 15 min tarde';
+            case 'ausente': return 'Ausente';
+            default: return '';
+        }
+    };
+
+    const motivoMap = {
+        'enfermedad': 'Enfermedad',
+        'permiso': 'Permiso',
+        'sin_justificar': 'Sin justificar',
+        'otro': 'Otro'
+    };
+
+    if (loading) {
+        return <div style={styles.loading}>Cargando...</div>;
+    }
+
     return (
         <div style={styles.container}>
-            <h2 style={styles.title}>Registro de Inasistencias</h2>
-            <p style={styles.subtitle}>Marque las ausencias de los estudiantes</p>
+            <h2 style={styles.pageTitle}>Registro de Inasistencias</h2>
+            <p style={styles.pageSubtitle}>Marque las ausencias de los estudiantes</p>
 
-            {/* Nueva Inasistencia */}
-            <div style={styles.card}>
-                <h3 style={styles.cardTitle}>Nueva Inasistencia</h3>
+            {/* Nueva Inasistencia - Selector rápido */}
+            <div style={styles.formCard}>
+                <h3 style={styles.formTitle}>Nueva Inasistencia</h3>
                 
                 <div style={styles.formGroup}>
                     <label style={styles.label}>Curso</label>
                     <select 
                         style={styles.select}
                         value={selectedCurso}
-                        onChange={(e) => setSelectedCurso(e.target.value)}
+                        onChange={(e) => {
+                            setSelectedCurso(e.target.value);
+                            setSelectedEstudiante('');
+                        }}
                     >
                         <option value="">Seleccione un curso</option>
                         {cursos.map(curso => (
@@ -121,21 +220,30 @@ const DocenteInasistencias = ({ user }) => {
                 <div style={styles.buttonGroup}>
                     <button 
                         style={{...styles.button, backgroundColor: '#27ae60'}}
-                        onClick={() => marcarAsistencia(selectedEstudiante, 'presente')}
+                        onClick={() => {
+                            const student = estudiantesFiltrados.find(e => e._id === selectedEstudiante);
+                            if (student) handleAttendanceClick(student, 'presente');
+                        }}
                         disabled={!selectedEstudiante}
                     >
                         Marcar Presente
                     </button>
                     <button 
                         style={{...styles.button, backgroundColor: '#e74c3c'}}
-                        onClick={() => marcarAsistencia(selectedEstudiante, 'ausente')}
+                        onClick={() => {
+                            const student = estudiantesFiltrados.find(e => e._id === selectedEstudiante);
+                            if (student) handleAttendanceClick(student, 'ausente');
+                        }}
                         disabled={!selectedEstudiante}
                     >
                         Marcar Ausente
                     </button>
                     <button 
                         style={{...styles.button, backgroundColor: '#f39c12'}}
-                        onClick={() => marcarAsistencia(selectedEstudiante, 'tarde')}
+                        onClick={() => {
+                            const student = estudiantesFiltrados.find(e => e._id === selectedEstudiante);
+                            if (student) handleAttendanceClick(student, 'tarde');
+                        }}
                         disabled={!selectedEstudiante}
                     >
                         Marcar Tardanza
@@ -144,143 +252,373 @@ const DocenteInasistencias = ({ user }) => {
             </div>
 
             {/* Lista de Asistencia - Hoy */}
-            <div style={styles.card}>
-                <h3 style={styles.cardTitle}>Lista de Asistencia - Hoy</h3>
+            <div style={styles.listCard}>
+                <h3 style={styles.listTitle}>Lista de Asistencia - Hoy</h3>
                 
-                {estudiantes.length === 0 ? (
-                    <p style={styles.emptyMessage}>No hay estudiantes asignados</p>
+                {estudiantesFiltrados.length === 0 ? (
+                    <p style={styles.emptyMessage}>Seleccione un curso para ver los estudiantes</p>
                 ) : (
-                    estudiantes.map(est => {
-                        const asistenciaHoy = asistenciasHoy.find(a => a.studentId === est._id);
-                        return (
-                            <div key={est._id} style={styles.studentRow}>
-                                <span style={styles.studentName}>
-                                    {est.apellido1 || est.apellido} - {est.grado_especifico}
-                                </span>
-                                <div style={styles.rowButtons}>
-                                    <button 
-                                        style={{
-                                            ...styles.smallButton,
-                                            backgroundColor: asistenciaHoy?.estado === 'presente' ? '#27ae60' : '#95a5a6'
-                                        }}
-                                        onClick={() => marcarAsistencia(est._id, 'presente')}
-                                    >
-                                        Presente
-                                    </button>
-                                    <button 
-                                        style={{
-                                            ...styles.smallButton,
-                                            backgroundColor: asistenciaHoy?.estado === 'ausente' ? '#e74c3c' : '#95a5a6'
-                                        }}
-                                        onClick={() => marcarAsistencia(est._id, 'ausente')}
-                                    >
-                                        Ausente
-                                    </button>
-                                    <button 
-                                        style={{
-                                            ...styles.smallButton,
-                                            backgroundColor: asistenciaHoy?.estado === 'tarde' ? '#f39c12' : '#95a5a6'
-                                        }}
-                                        onClick={() => marcarAsistencia(est._id, 'tarde')}
-                                    >
-                                        Tardanza
-                                    </button>
+                    <div style={styles.studentList}>
+                        {estudiantesFiltrados.map(est => {
+                            const estadoActual = getStudentAttendance(est._id);
+                            const estadoInfo = getEstadoBadge(estadoActual);
+                            const record = asistenciasHoy.find(a => a.studentId?._id === est._id || a.studentId === est._id);
+                            const motivoTexto = record?.motivo ? motivoMap[record.motivo] : '';
+                            
+                            return (
+                                <div key={est._id} style={styles.studentRow}>
+                                    <div style={styles.studentInfo}>
+                                        <span style={styles.studentName}>
+                                            {est.apellido1 || est.apellido}
+                                        </span>
+                                        <span style={styles.studentGrade}>{est.grado_especifico}</span>
+                                        {motivoTexto && (
+                                            <span style={styles.motivoText}> - {motivoTexto}</span>
+                                        )}
+                                    </div>
+                                    <div style={styles.rowButtons}>
+                                        <button
+                                            style={{
+                                                ...styles.smallButton,
+                                                backgroundColor: estadoActual === 'presente' ? '#27ae60' : '#ecf0f1',
+                                                color: estadoActual === 'presente' ? 'white' : '#2c3e50'
+                                            }}
+                                            onClick={() => handleAttendanceClick(est, 'presente')}
+                                        >
+                                            Presente
+                                        </button>
+                                        <button
+                                            style={{
+                                                ...styles.smallButton,
+                                                backgroundColor: estadoActual === 'ausente' ? '#e74c3c' : '#ecf0f1',
+                                                color: estadoActual === 'ausente' ? 'white' : '#2c3e50'
+                                            }}
+                                            onClick={() => handleAttendanceClick(est, 'ausente')}
+                                        >
+                                            Ausente
+                                        </button>
+                                        <button
+                                            style={{
+                                                ...styles.smallButton,
+                                                backgroundColor: estadoActual === 'tarde' ? '#f39c12' : '#ecf0f1',
+                                                color: estadoActual === 'tarde' ? 'white' : '#2c3e50'
+                                            }}
+                                            onClick={() => handleAttendanceClick(est, 'tarde')}
+                                        >
+                                            Tardanza
+                                        </button>
+                                    </div>
                                 </div>
-                            </div>
-                        );
-                    })
+                            );
+                        })}
+                    </div>
                 )}
             </div>
+
+            {/* Modal para registrar motivo de ausencia/tardanza */}
+            {showMotivoModal && currentStudent && (
+                <div style={styles.modalOverlay}>
+                    <div style={styles.modal}>
+                        <h3 style={styles.modalTitle}>
+                            Registrar {currentEstado === 'ausente' ? 'Ausencia' : 'Tardanza'}
+                        </h3>
+                        <p style={styles.modalSubtitle}>
+                            Estudiante: <strong>{currentStudent.apellido1 || currentStudent.apellido}</strong>
+                        </p>
+
+                        <div style={styles.modalContent}>
+                            <div style={styles.formGroup}>
+                                <label style={styles.modalLabel}>Motivo:</label>
+                                <div style={styles.radioGroup}>
+                                    <label style={styles.radioLabel}>
+                                        <input
+                                            type="radio"
+                                            name="motivo"
+                                            value="enfermedad"
+                                            checked={motivoData.motivo === 'enfermedad'}
+                                            onChange={(e) => setMotivoData({...motivoData, motivo: e.target.value})}
+                                        />
+                                        Enfermedad
+                                    </label>
+                                    <label style={styles.radioLabel}>
+                                        <input
+                                            type="radio"
+                                            name="motivo"
+                                            value="permiso"
+                                            checked={motivoData.motivo === 'permiso'}
+                                            onChange={(e) => setMotivoData({...motivoData, motivo: e.target.value})}
+                                        />
+                                        Permiso
+                                    </label>
+                                    <label style={styles.radioLabel}>
+                                        <input
+                                            type="radio"
+                                            name="motivo"
+                                            value="sin_justificar"
+                                            checked={motivoData.motivo === 'sin_justificar'}
+                                            onChange={(e) => setMotivoData({...motivoData, motivo: e.target.value})}
+                                        />
+                                        Sin justificar
+                                    </label>
+                                    <label style={styles.radioLabel}>
+                                        <input
+                                            type="radio"
+                                            name="motivo"
+                                            value="otro"
+                                            checked={motivoData.motivo === 'otro'}
+                                            onChange={(e) => setMotivoData({...motivoData, motivo: e.target.value})}
+                                        />
+                                        Otro
+                                    </label>
+                                </div>
+                            </div>
+
+                            <div style={styles.formGroup}>
+                                <label style={styles.modalLabel}>Observaciones (opcional):</label>
+                                <textarea
+                                    value={motivoData.observacion}
+                                    onChange={(e) => setMotivoData({...motivoData, observacion: e.target.value})}
+                                    style={styles.textarea}
+                                    rows="3"
+                                    placeholder="Ingrese observaciones adicionales..."
+                                />
+                            </div>
+                        </div>
+
+                        <div style={styles.modalButtons}>
+                            <button style={styles.cancelButton} onClick={() => setShowMotivoModal(false)}>
+                                Cancelar
+                            </button>
+                            <button style={styles.saveButton} onClick={handleMotivoSubmit}>
+                                Guardar
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };
 
 const styles = {
     container: {
-        padding: '20px'
+        padding: '24px',
+        maxWidth: '1000px',
+        margin: '0 auto'
     },
-    title: {
-        margin: '0 0 5px 0',
-        color: '#2c3e50',
-        fontSize: '22px'
+    loading: {
+        textAlign: 'center',
+        padding: '50px'
     },
-    subtitle: {
-        margin: '0 0 30px 0',
-        color: '#7f8c8d',
-        fontSize: '14px'
+    pageTitle: {
+        margin: '0 0 8px 0',
+        fontSize: '28px',
+        fontWeight: '600',
+        color: '#2c3e50'
     },
-    card: {
+    pageSubtitle: {
+        margin: '0 0 32px 0',
+        fontSize: '16px',
+        color: '#7f8c8d'
+    },
+    formCard: {
         backgroundColor: 'white',
-        borderRadius: '10px',
-        boxShadow: '0 2px 10px rgba(0,0,0,0.1)',
-        padding: '20px',
-        marginBottom: '30px'
+        borderRadius: '16px',
+        boxShadow: '0 8px 24px rgba(0,0,0,0.12)',
+        padding: '24px',
+        marginBottom: '24px'
     },
-    cardTitle: {
+    formTitle: {
         margin: '0 0 20px 0',
-        color: '#2c3e50',
         fontSize: '18px',
-        paddingBottom: '10px',
-        borderBottom: '2px solid #27ae60'
+        fontWeight: '600',
+        color: '#2c3e50',
+        borderBottom: '2px solid #27ae60',
+        paddingBottom: '8px'
+    },
+    listCard: {
+        backgroundColor: 'white',
+        borderRadius: '16px',
+        boxShadow: '0 8px 24px rgba(0,0,0,0.12)',
+        padding: '24px'
+    },
+    listTitle: {
+        margin: '0 0 20px 0',
+        fontSize: '18px',
+        fontWeight: '600',
+        color: '#2c3e50',
+        borderBottom: '2px solid #27ae60',
+        paddingBottom: '8px'
     },
     formGroup: {
-        marginBottom: '15px'
+        marginBottom: '20px'
     },
     label: {
         display: 'block',
-        marginBottom: '5px',
-        fontWeight: 'bold',
-        color: '#2c3e50'
+        marginBottom: '8px',
+        fontWeight: '600',
+        color: '#2c3e50',
+        fontSize: '14px'
     },
     select: {
         width: '100%',
-        padding: '10px',
-        border: '1px solid #bdc3c7',
-        borderRadius: '5px',
-        fontSize: '14px'
+        padding: '12px',
+        border: '1px solid #dcdfe6',
+        borderRadius: '8px',
+        fontSize: '14px',
+        backgroundColor: 'white'
     },
     buttonGroup: {
         display: 'flex',
-        gap: '10px',
+        gap: '12px',
         marginTop: '20px'
     },
     button: {
         flex: 1,
         padding: '12px',
         border: 'none',
-        borderRadius: '5px',
+        borderRadius: '8px',
         color: 'white',
-        fontWeight: 'bold',
+        fontWeight: '600',
         cursor: 'pointer',
-        fontSize: '14px'
+        fontSize: '14px',
+        transition: 'all 0.2s'
+    },
+    studentList: {
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '12px'
     },
     studentRow: {
         display: 'flex',
         justifyContent: 'space-between',
         alignItems: 'center',
         padding: '12px',
-        borderBottom: '1px solid #ecf0f1'
+        backgroundColor: '#f8fafc',
+        borderRadius: '8px',
+        border: '1px solid #e2e8f0'
+    },
+    studentInfo: {
+        display: 'flex',
+        gap: '12px',
+        alignItems: 'center',
+        flexWrap: 'wrap'
     },
     studentName: {
-        fontWeight: '500',
-        color: '#2c3e50'
+        fontWeight: '600',
+        color: '#2d3748'
+    },
+    studentGrade: {
+        padding: '2px 8px',
+        backgroundColor: '#e2e8f0',
+        borderRadius: '20px',
+        fontSize: '12px',
+        color: '#4a5568'
+    },
+    motivoText: {
+        fontSize: '12px',
+        color: '#718096',
+        fontStyle: 'italic'
     },
     rowButtons: {
         display: 'flex',
         gap: '8px'
     },
     smallButton: {
-        padding: '5px 10px',
+        padding: '6px 12px',
         border: 'none',
-        borderRadius: '3px',
-        color: 'white',
+        borderRadius: '6px',
         cursor: 'pointer',
-        fontSize: '12px'
+        fontSize: '12px',
+        fontWeight: '500',
+        transition: 'all 0.2s'
     },
     emptyMessage: {
         textAlign: 'center',
-        color: '#95a5a6',
-        padding: '20px'
+        color: '#a0aec0',
+        padding: '40px'
+    },
+    modalOverlay: {
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        backgroundColor: 'rgba(0,0,0,0.5)',
+        display: 'flex',
+        justifyContent: 'center',
+        alignItems: 'center',
+        zIndex: 1000
+    },
+    modal: {
+        backgroundColor: 'white',
+        borderRadius: '16px',
+        padding: '24px',
+        width: '90%',
+        maxWidth: '450px'
+    },
+    modalTitle: {
+        margin: '0 0 8px 0',
+        fontSize: '20px',
+        fontWeight: '600',
+        color: '#2c3e50'
+    },
+    modalSubtitle: {
+        margin: '0 0 20px 0',
+        fontSize: '14px',
+        color: '#7f8c8d'
+    },
+    modalContent: {
+        marginBottom: '20px'
+    },
+    modalLabel: {
+        display: 'block',
+        marginBottom: '10px',
+        fontWeight: '600',
+        color: '#2c3e50'
+    },
+    radioGroup: {
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '8px'
+    },
+    radioLabel: {
+        display: 'flex',
+        alignItems: 'center',
+        gap: '8px',
+        cursor: 'pointer',
+        fontSize: '14px'
+    },
+    textarea: {
+        width: '100%',
+        padding: '12px',
+        border: '1px solid #dcdfe6',
+        borderRadius: '8px',
+        fontSize: '14px',
+        fontFamily: 'inherit',
+        resize: 'vertical'
+    },
+    modalButtons: {
+        display: 'flex',
+        justifyContent: 'flex-end',
+        gap: '12px',
+        marginTop: '20px'
+    },
+    cancelButton: {
+        padding: '10px 20px',
+        backgroundColor: '#95a5a6',
+        color: 'white',
+        border: 'none',
+        borderRadius: '8px',
+        cursor: 'pointer'
+    },
+    saveButton: {
+        padding: '10px 20px',
+        backgroundColor: '#27ae60',
+        color: 'white',
+        border: 'none',
+        borderRadius: '8px',
+        cursor: 'pointer'
     }
 };
 

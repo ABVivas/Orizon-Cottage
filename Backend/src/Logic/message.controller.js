@@ -10,13 +10,27 @@ export const createMessage = async (req, res) => {
       remitenteId,
       destinatarioId,
       asunto,
-      contenido
+      contenido,
+      fechaEnvio: new Date()
     });
 
     await newMessage.save();
-    res.status(201).json({ message: "Mensaje enviado", data: newMessage });
+    
+    // Poblar los datos para la respuesta
+    await newMessage.populate('remitenteId', 'nombre');
+    await newMessage.populate('destinatarioId', 'nombre');
+
+    res.status(201).json({ 
+      success: true,
+      message: "Mensaje enviado", 
+      data: newMessage 
+    });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error('❌ Error al crear mensaje:', error);
+    res.status(500).json({ 
+      success: false,
+      error: error.message 
+    });
   }
 };
 
@@ -27,11 +41,18 @@ export const getReceivedMessages = async (req, res) => {
 
     const messages = await Message.find({
       destinatarioId: userId
-    }).populate("remitenteId", "nombre apellido");
+    })
+    .populate("remitenteId", "nombre")
+    .populate("destinatarioId", "nombre")
+    .sort({ fechaEnvio: -1 });
 
     res.status(200).json(messages);
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error('❌ Error al obtener mensajes recibidos:', error);
+    res.status(500).json({ 
+      success: false,
+      error: error.message 
+    });
   }
 };
 
@@ -42,11 +63,18 @@ export const getSentMessages = async (req, res) => {
 
     const messages = await Message.find({
       remitenteId: userId
-    }).populate("destinatarioId", "nombre apellido");
+    })
+    .populate("remitenteId", "nombre")
+    .populate("destinatarioId", "nombre")
+    .sort({ fechaEnvio: -1 });
 
     res.status(200).json(messages);
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error('❌ Error al obtener mensajes enviados:', error);
+    res.status(500).json({ 
+      success: false,
+      error: error.message 
+    });
   }
 };
 
@@ -62,11 +90,22 @@ export const markAsRead = async (req, res) => {
     );
 
     if (!updatedMessage) {
-      return res.status(404).json({ message: "Mensaje no encontrado" });
+      return res.status(404).json({ 
+        success: false,
+        message: "Mensaje no encontrado" 
+      });
     }
 
-    res.status(200).json({ message: "Mensaje marcado como leído", data: updatedMessage });
+    res.status(200).json({ 
+      success: true,
+      message: "Mensaje marcado como leído", 
+      data: updatedMessage 
+    });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error('❌ Error al marcar como leído:', error);
+    res.status(500).json({ 
+      success: false,
+      error: error.message 
+    });
   }
 };

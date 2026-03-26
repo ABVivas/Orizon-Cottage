@@ -1,10 +1,10 @@
 // Frontend/src/Pages/DocenteDashboard.jsx
 import { useState, useEffect } from 'react';
 
-const DocenteDashboard = ({ user }) => {
+const DocenteDashboard = ({ user, setActiveSection }) => {
     const [stats, setStats] = useState({
         totalEstudiantes: 0,
-        asistenciaPromedio: 0
+        porcentajeInasistencias: 0
     });
     const [inasistenciasRecientes, setInasistenciasRecientes] = useState([]);
     const [observacionesRecientes, setObservacionesRecientes] = useState([]);
@@ -13,7 +13,9 @@ const DocenteDashboard = ({ user }) => {
     const [error, setError] = useState('');
 
     useEffect(() => {
-        fetchData();
+        if (user?.id) {
+            fetchData();
+        }
     }, [user]);
 
     const fetchData = async () => {
@@ -29,32 +31,83 @@ const DocenteDashboard = ({ user }) => {
             }
 
             console.log('🔍 Cargando datos para docente:', docenteId);
-            console.log('👤 Usuario:', user);
 
-            // 1. Obtener estudiantes del docente (YA FILTRADO POR GRADOS)
+            // 1. Obtener estudiantes del docente
             const studentsRes = await fetch(`http://localhost:5000/api/students/docente/${docenteId}`, {
                 headers: { 'Authorization': `Bearer ${token}` }
             });
             
             if (!studentsRes.ok) throw new Error('Error al cargar estudiantes');
             const studentsData = await studentsRes.json();
-            console.log('📚 Estudiantes del docente:', studentsData);
             
-            // Guardar los grados que enseña este docente
             setGradosDocente(studentsData.grados || []);
-            
-            // 2. Obtener inasistencias de los estudiantes del docente
-            const attendanceRes = await fetch(`http://localhost:5000/api/attendance/docente/${docenteId}?limit=5`, {
-                headers: { 'Authorization': `Bearer ${token}` }
-            });
+            const totalEstudiantes = studentsData.count || 0;
+
+            // 2. Obtener asistencias de los últimos 30 días
+            const hoy = new Date();
+            const hace30Dias = new Date();
+            hace30Dias.setDate(hoy.getDate() - 30);
+
+            const attendanceRes = await fetch(
+                `http://localhost:5000/api/attendance/docente/${docenteId}?limit=500&startDate=${hace30Dias.toISOString().split('T')[0]}&endDate=${hoy.toISOString().split('T')[0]}`,
+                { headers: { 'Authorization': `Bearer ${token}` } }
+            );
             
             let attendanceData = { data: [] };
             if (attendanceRes.ok) {
                 attendanceData = await attendanceRes.json();
             }
-            console.log('📊 Inasistencias:', attendanceData);
-            
-            // 3. Obtener observaciones del docente
+
+            const asistencias = attendanceData.data || [];
+
+            // Calcular estudiantes ÚNICOS con inasistencias
+            const estudiantesConInasistenciaSet = new Set();
+
+            asistencias.forEach(item => {
+                const estado = item.estado;
+                const studentId = item.studentId?._id?.toString() || item.studentId?.toString();
+                
+                if (studentId && (estado === 'ausente' || estado === 'tarde')) {
+                    estudiantesConInasistenciaSet.add(studentId);
+                }
+            });
+
+            const estudiantesConInasistencia = estudiantesConInasistenciaSet.size;
+            const porcentajeInasistencias = totalEstudiantes > 0 
+                ? Math.round((estudiantesConInasistencia / totalEstudiantes) * 100) 
+                : 0;
+
+            console.log('📊 Cálculo de inasistencias:');
+            console.log('   Total estudiantes:', totalEstudiantes);
+            console.log('   Estudiantes con inasistencias:', estudiantesConInasistencia);
+            console.log('   Porcentaje:', porcentajeInasistencias + '%');
+
+            setStats({
+                totalEstudiantes,
+                porcentajeInasistencias
+            });
+
+            // 3. Inasistencias recientes (últimos 5 registros NO presentes)
+            const inasistenciasFiltradas = asistencias
+                .filter(a => a.estado !== 'presente')
+                .slice(0, 5)
+                .map(item => {
+                    const estaJustificada = item.motivo && item.motivo !== '' && item.motivo !== 'sin_justificar';
+                    
+                    return {
+                        _id: item._id,
+                        estudiante: item.studentId?.apellido1 || item.studentId?.apellido || 'Estudiante',
+                        curso: item.studentId?.grado_especifico || '',
+                        fecha: item.fecha,
+                        justificada: estaJustificada,
+                        motivo: item.motivo,
+                        estado: item.estado
+                    };
+                });
+
+            setInasistenciasRecientes(inasistenciasFiltradas);
+
+            // 4. Observaciones recientes
             const obsRes = await fetch(`http://localhost:5000/api/observations/docente/${docenteId}?limit=5`, {
                 headers: { 'Authorization': `Bearer ${token}` }
             });
@@ -63,36 +116,15 @@ const DocenteDashboard = ({ user }) => {
             if (obsRes.ok) {
                 obsData = await obsRes.json();
             }
-            console.log('📝 Observaciones:', obsData);
 
-            // 4. Calcular estadísticas
-            const totalEstudiantes = studentsData.count || 0;
-            
-            // Calcular asistencia promedio (simulado por ahora)
-            const asistenciaPromedio = 95;
-
-            setStats({
-                totalEstudiantes,
-                asistenciaPromedio
-            });
-
-            // Formatear inasistencias para mostrar
-            const inasistenciasFormateadas = (attendanceData.data || []).map(item => ({
-                estudiante: item.estudiante?.nombre || item.estudiante?.apellido1 || 'Estudiante',
-                curso: item.estudiante?.grado_especifico || '',
-                fecha: item.fecha,
-                justificada: !!item.motivo
-            }));
-
-            // Formatear observaciones para mostrar
             const observacionesFormateadas = (obsData.data || []).map(item => ({
-                estudiante: item.estudiante?.apellido1 || item.estudiante?.apellido || 'Estudiante',
+                _id: item._id,
+                estudiante: item.studentId?.apellido1 || item.studentId?.apellido || 'Estudiante',
                 tipo: item.tipo || 'General',
                 fecha: item.fecha,
                 nivel: item.nivel || 'N/A'
             }));
 
-            setInasistenciasRecientes(inasistenciasFormateadas);
             setObservacionesRecientes(observacionesFormateadas);
 
         } catch (error) {
@@ -113,11 +145,21 @@ const DocenteDashboard = ({ user }) => {
         });
     };
 
+    const getMotivoTexto = (motivo) => {
+        const motivos = {
+            'enfermedad': 'Enfermedad',
+            'permiso': 'Permiso',
+            'sin_justificar': 'Sin justificar',
+            'otro': 'Otro'
+        };
+        return motivos[motivo] || motivo || 'Sin motivo';
+    };
+
     if (loading) {
         return (
             <div style={styles.loadingContainer}>
                 <div style={styles.loadingSpinner}></div>
-                <p style={styles.loadingText}>Cargando panel del docente...</p>
+                <p>Cargando panel del docente...</p>
             </div>
         );
     }
@@ -125,17 +167,14 @@ const DocenteDashboard = ({ user }) => {
     if (error) {
         return (
             <div style={styles.errorContainer}>
-                <p style={styles.errorText}>Error: {error}</p>
-                <button onClick={fetchData} style={styles.retryButton}>
-                    Reintentar
-                </button>
+                <p>Error: {error}</p>
+                <button onClick={fetchData} style={styles.retryButton}>Reintentar</button>
             </div>
         );
     }
 
     return (
         <div style={styles.container}>
-            {/* Header de bienvenida */}
             <div style={styles.welcomeSection}>
                 <h2 style={styles.welcomeTitle}>
                     ¡Hola, {user?.nombre?.split(' ')[0] || 'Docente'}! 🎉
@@ -150,20 +189,14 @@ const DocenteDashboard = ({ user }) => {
                 )}
             </div>
 
-            {/* Stats Cards */}
             <div style={styles.statsGrid}>
                 <div style={styles.statCard}>
                     <span style={styles.statNumber}>{stats.totalEstudiantes}</span>
                     <span style={styles.statLabel}>Estudiantes</span>
-                    {stats.totalEstudiantes > 0 && (
-                        <span style={styles.statTrend}>+{Math.floor(stats.totalEstudiantes * 0.1)} este mes</span>
-                    )}
                 </div>
-
                 <div style={styles.statCard}>
-                    <span style={styles.statNumber}>{stats.asistenciaPromedio}%</span>
-                    <span style={styles.statLabel}>Asistencia</span>
-                    <span style={{...styles.statTrend, color: '#27ae60'}}>↑ 5% que ayer</span>
+                    <span style={styles.statNumber}>{stats.porcentajeInasistencias}%</span>
+                    <span style={styles.statLabel}>Inasistencias (últ. 30 días)</span>
                 </div>
             </div>
 
@@ -174,19 +207,24 @@ const DocenteDashboard = ({ user }) => {
                         <span style={styles.sectionIcon}>📋</span>
                         Inasistencias Recientes
                     </h3>
-                    <button style={styles.viewAllButton}>Ver todas →</button>
+                    <button 
+                        style={styles.viewAllButton} 
+                        onClick={() => setActiveSection && setActiveSection('historial')}
+                    >
+                        Ver todas →
+                    </button>
                 </div>
                 
                 {inasistenciasRecientes.length === 0 ? (
                     <div style={styles.emptyState}>
                         <span style={styles.emptyIcon}>✅</span>
-                        <p style={styles.emptyText}>No hay inasistencias recientes</p>
+                        <p>No hay inasistencias recientes</p>
                         <p style={styles.emptySubtext}>Todos los estudiantes han asistido hoy</p>
                     </div>
                 ) : (
                     <div style={styles.listContainer}>
-                        {inasistenciasRecientes.map((item, index) => (
-                            <div key={index} style={styles.listItem}>
+                        {inasistenciasRecientes.map((item) => (
+                            <div key={item._id} style={styles.listItem}>
                                 <div style={styles.itemHeader}>
                                     <strong>{item.estudiante}</strong>
                                     <span style={styles.itemCurso}>{item.curso}</span>
@@ -194,6 +232,9 @@ const DocenteDashboard = ({ user }) => {
                                 <div style={styles.itemDetails}>
                                     <span style={styles.itemDate}>
                                         {formatDate(item.fecha)}
+                                    </span>
+                                    <span style={styles.motivoBadge}>
+                                        {getMotivoTexto(item.motivo)}
                                     </span>
                                     <span style={{
                                         ...styles.badge,
@@ -215,19 +256,24 @@ const DocenteDashboard = ({ user }) => {
                         <span style={styles.sectionIcon}>📝</span>
                         Observaciones Recientes
                     </h3>
-                    <button style={styles.viewAllButton}>Ver todas →</button>
+                    <button 
+                        style={styles.viewAllButton}
+                        onClick={() => setActiveSection && setActiveSection('historial')}
+                    >
+                        Ver todas →
+                    </button>
                 </div>
                 
                 {observacionesRecientes.length === 0 ? (
                     <div style={styles.emptyState}>
                         <span style={styles.emptyIcon}>📭</span>
-                        <p style={styles.emptyText}>No hay observaciones recientes</p>
+                        <p>No hay observaciones recientes</p>
                         <p style={styles.emptySubtext}>Las nuevas observaciones aparecerán aquí</p>
                     </div>
                 ) : (
                     <div style={styles.listContainer}>
-                        {observacionesRecientes.map((item, index) => (
-                            <div key={index} style={styles.listItem}>
+                        {observacionesRecientes.map((item) => (
+                            <div key={item._id} style={styles.listItem}>
                                 <div style={styles.itemHeader}>
                                     <strong>{item.estudiante}</strong>
                                     <span style={{
@@ -244,9 +290,9 @@ const DocenteDashboard = ({ user }) => {
                                     <span style={{
                                         ...styles.nivelBadge,
                                         backgroundColor: 
-                                            item.nivel === 'Leve' ? '#27ae60' :
-                                            item.nivel === 'Medio' ? '#f39c12' :
-                                            item.nivel === 'Grave' ? '#e74c3c' : '#95a5a6'
+                                            item.nivel === 'Tipo I' ? '#27ae60' :
+                                            item.nivel === 'Tipo II' ? '#f39c12' :
+                                            item.nivel === 'Tipo III' ? '#e74c3c' : '#95a5a6'
                                     }}>
                                         {item.nivel}
                                     </span>
@@ -262,17 +308,16 @@ const DocenteDashboard = ({ user }) => {
 
 const styles = {
     container: {
-        padding: '16px',
-        width: '100%',
-        boxSizing: 'border-box'
+        padding: '24px',
+        maxWidth: '1000px',
+        margin: '0 auto'
     },
     loadingContainer: {
         display: 'flex',
         flexDirection: 'column',
         justifyContent: 'center',
         alignItems: 'center',
-        height: '300px',
-        width: '100%'
+        height: '300px'
     },
     loadingSpinner: {
         width: '40px',
@@ -283,21 +328,9 @@ const styles = {
         animation: 'spin 1s linear infinite',
         marginBottom: '15px'
     },
-    loadingText: {
-        color: '#2c3e50',
-        fontSize: '14px'
-    },
     errorContainer: {
-        display: 'flex',
-        flexDirection: 'column',
-        justifyContent: 'center',
-        alignItems: 'center',
-        height: '300px',
-        gap: '15px'
-    },
-    errorText: {
-        color: '#e74c3c',
-        fontSize: '14px'
+        textAlign: 'center',
+        padding: '50px'
     },
     retryButton: {
         padding: '8px 20px',
@@ -305,14 +338,15 @@ const styles = {
         color: 'white',
         border: 'none',
         borderRadius: '5px',
-        cursor: 'pointer'
+        cursor: 'pointer',
+        marginTop: '15px'
     },
     welcomeSection: {
-        marginBottom: '20px'
+        marginBottom: '24px'
     },
     welcomeTitle: {
-        margin: '0 0 4px 0',
-        fontSize: '22px',
+        margin: '0 0 8px 0',
+        fontSize: '24px',
         fontWeight: '600',
         color: '#2c3e50'
     },
@@ -329,49 +363,37 @@ const styles = {
     },
     statsGrid: {
         display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
+        gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
         gap: '16px',
-        marginBottom: '20px'
+        marginBottom: '24px'
     },
     statCard: {
         backgroundColor: 'white',
-        padding: '16px',
+        padding: '20px',
         borderRadius: '12px',
         boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
-        display: 'flex',
-        flexDirection: 'column',
-        gap: '4px',
-        position: 'relative'
+        textAlign: 'center'
     },
     statNumber: {
-        fontSize: '24px',
+        display: 'block',
+        fontSize: '28px',
         fontWeight: 'bold',
         color: '#2c3e50',
-        lineHeight: 1.2
+        marginBottom: '5px'
     },
     statLabel: {
         color: '#7f8c8d',
         fontSize: '13px'
     },
-    statTrend: {
-        position: 'absolute',
-        top: '8px',
-        right: '8px',
-        fontSize: '11px',
-        color: '#e74c3c',
-        backgroundColor: '#fdeded',
-        padding: '2px 8px',
-        borderRadius: '12px'
-    },
     sectionCard: {
         backgroundColor: 'white',
         borderRadius: '12px',
         boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
-        marginBottom: '16px',
+        marginBottom: '20px',
         overflow: 'hidden'
     },
     sectionHeader: {
-        padding: '14px 16px',
+        padding: '16px 20px',
         borderBottom: '1px solid #ecf0f1',
         display: 'flex',
         justifyContent: 'space-between',
@@ -380,7 +402,7 @@ const styles = {
     sectionTitle: {
         margin: 0,
         fontSize: '16px',
-        fontWeight: '500',
+        fontWeight: '600',
         color: '#2c3e50',
         display: 'flex',
         alignItems: 'center',
@@ -396,13 +418,10 @@ const styles = {
         fontSize: '13px',
         cursor: 'pointer',
         padding: '4px 8px',
-        borderRadius: '4px',
-        ':hover': {
-            backgroundColor: '#e8f5e9'
-        }
+        borderRadius: '4px'
     },
     emptyState: {
-        padding: '24px 16px',
+        padding: '40px',
         textAlign: 'center'
     },
     emptyIcon: {
@@ -411,72 +430,74 @@ const styles = {
         marginBottom: '8px',
         display: 'block'
     },
-    emptyText: {
-        color: '#2c3e50',
-        fontSize: '15px',
-        fontWeight: '500',
-        margin: '0 0 4px 0'
-    },
     emptySubtext: {
-        color: '#95a5a6',
         fontSize: '13px',
-        margin: 0
+        color: '#95a5a6',
+        marginTop: '4px'
     },
     listContainer: {
-        display: 'flex',
-        flexDirection: 'column',
-        gap: '8px',
         padding: '16px'
     },
     listItem: {
         padding: '12px',
-        backgroundColor: '#f8f9fa',
+        backgroundColor: '#f8fafc',
         borderRadius: '8px',
+        marginBottom: '8px',
         borderLeft: '3px solid #27ae60'
     },
     itemHeader: {
         display: 'flex',
         justifyContent: 'space-between',
         alignItems: 'center',
-        marginBottom: '6px'
+        marginBottom: '8px',
+        flexWrap: 'wrap',
+        gap: '8px'
     },
     itemCurso: {
-        color: '#7f8c8d',
+        color: '#718096',
         fontSize: '12px',
-        backgroundColor: '#ecf0f1',
+        backgroundColor: '#e2e8f0',
         padding: '2px 8px',
-        borderRadius: '12px'
+        borderRadius: '20px'
     },
     itemDetails: {
         display: 'flex',
         justifyContent: 'space-between',
-        alignItems: 'center'
+        alignItems: 'center',
+        flexWrap: 'wrap',
+        gap: '8px'
     },
     itemDate: {
-        color: '#7f8c8d',
-        fontSize: '12px'
+        fontSize: '12px',
+        color: '#718096'
+    },
+    motivoBadge: {
+        fontSize: '11px',
+        color: '#718096',
+        backgroundColor: '#edf2f7',
+        padding: '2px 8px',
+        borderRadius: '20px'
     },
     badge: {
-        padding: '2px 8px',
-        borderRadius: '12px',
+        padding: '4px 12px',
+        borderRadius: '20px',
         color: 'white',
         fontSize: '11px',
-        fontWeight: 'bold'
+        fontWeight: '600'
     },
     tipoBadge: {
-        padding: '2px 8px',
-        borderRadius: '12px',
+        padding: '4px 12px',
+        borderRadius: '20px',
         color: 'white',
         fontSize: '11px',
-        fontWeight: 'bold',
-        marginLeft: '8px'
+        fontWeight: '600'
     },
     nivelBadge: {
-        padding: '2px 8px',
-        borderRadius: '12px',
+        padding: '4px 12px',
+        borderRadius: '20px',
         color: 'white',
         fontSize: '11px',
-        fontWeight: 'bold'
+        fontWeight: '600'
     }
 };
 

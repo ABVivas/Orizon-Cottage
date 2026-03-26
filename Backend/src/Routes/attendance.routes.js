@@ -4,7 +4,8 @@ import {
     registerAttendance,
     getAttendanceByDate,
     getAttendanceSummary,
-    getAttendanceByStudent
+    getAttendanceByStudent,
+    getAttendanceByTeacher
 } from '../Logic/attendance.controller.js';
 import { verifyToken } from '../Middleware/auth.middleware.js';
 
@@ -15,5 +16,6 @@ router.post('/', verifyToken, registerAttendance);
 router.get('/', verifyToken, getAttendanceByDate);
 router.get('/summary', verifyToken, getAttendanceSummary);
 router.get('/estudiante/:studentId', verifyToken, getAttendanceByStudent);
+router.get('/docente/:docenteId', verifyToken, getAttendanceByTeacher);
 
 export default router;

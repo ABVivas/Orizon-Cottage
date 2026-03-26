@@ -1,318 +1,305 @@
 // Frontend/src/Pages/AdminDashboard.jsx
 import { useState, useEffect } from 'react';
-import UserManagement from './UserManagement';
-import StudentManagement from './StudentManagement';
-import TeacherManagement from './TeacherManagement';
-import AttendanceControl from './AttendanceControl';
-import DisciplineReports from './DisciplineReports';
-import InstitutionalMessaging from './InstitutionalMessaging';
+import AdminLayout from './AdminLayout';
+import AdminSeguimiento from './AdminSeguimiento';
+import AdminAttendanceControl from './AdminAttendanceControl';
+import AdminReports from './AdminReports';
+import AdminUserManagement from './AdminUserManagement';
+import AdminMessaging from './AdminMessaging';
 import AdminProfile from './AdminProfile';
-import SystemSettings from './SystemSettings';
-import SeguimientoGeneral from './SeguimientoGeneral';
-
+import AdminSettings from './AdminSettings';
 
 const AdminDashboard = ({ user, onLogout }) => {
     const [activeSection, setActiveSection] = useState('overview');
     const [stats, setStats] = useState({
-        totalStudents: 168,
-        totalTeachers: 14,
-        totalParents: 154,
-        todayAttendance: 85,
-        pendingObservations: 12,
-        unreadMessages: 0
+        totalStudents: 0,
+        totalTeachers: 0,
+        totalParents: 0,
+        todayInasistencia: 0
     });
+    const [recentActivity, setRecentActivity] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState('');
 
     useEffect(() => {
-        // Aquí puedes fetch las estadísticas reales
         fetchStats();
+        fetchRecentActivity();
     }, []);
 
     const fetchStats = async () => {
         try {
+            setLoading(true);
+            setError('');
             const token = localStorage.getItem('token');
-            const response = await fetch('http://localhost:5000/api/admin/stats', {
-                headers: {
-                    'Authorization': `Bearer ${token}`
-                }
+            
+            // 1. Obtener total de estudiantes
+            const studentsRes = await fetch('http://localhost:5000/api/students', {
+                headers: { 'Authorization': `Bearer ${token}` }
             });
-            const data = await response.json();
-            if (data.success) {
-                setStats(data.stats);
+            const studentsData = await studentsRes.json();
+            const totalEstudiantes = studentsData.success ? studentsData.data.length : 0;
+            
+            // 2. Obtener docentes y acudientes
+            const usersRes = await fetch('http://localhost:5000/api/users', {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            const usersData = await usersRes.json();
+            const users = usersData.success ? usersData.users : [];
+            const totalTeachers = users.filter(u => u.rol === 'docente').length;
+            const totalParents = users.filter(u => u.rol === 'acudiente').length;
+            
+            // 3. Calcular inasistencias de los últimos 30 días
+            const hoy = new Date();
+            const hace30Dias = new Date();
+            hace30Dias.setDate(hoy.getDate() - 30);
+            
+            const startDate = hace30Dias.toISOString().split('T')[0];
+            const endDate = hoy.toISOString().split('T')[0];
+            
+            console.log(`📡 Buscando asistencias del ${startDate} al ${endDate}`);
+            
+            // Obtener todas las asistencias (sin filtro de fecha en la URL, luego filtramos)
+            // Primero obtenemos todas las asistencias de los últimos 30 días con múltiples llamadas por fecha
+            const estudiantesConInasistenciaSet = new Set();
+            
+            // Iterar día por día para obtener asistencias
+            let currentDate = new Date(hace30Dias);
+            let diasConDatos = 0;
+            
+            while (currentDate <= hoy) {
+                const dateStr = currentDate.toISOString().split('T')[0];
+                try {
+                    const attendanceRes = await fetch(`http://localhost:5000/api/attendance?date=${dateStr}`, {
+                        headers: { 'Authorization': `Bearer ${token}` }
+                    });
+                    const attendanceData = await attendanceRes.json();
+                    
+                    if (attendanceData.success && attendanceData.attendance) {
+                        attendanceData.attendance.forEach(record => {
+                            // Si es ausente o tarde, agregar el estudiante al Set
+                            if (record.estado === 'ausente' || record.estado === 'tarde') {
+                                const studentId = record.studentId?._id?.toString() || record.studentId?.toString();
+                                if (studentId) {
+                                    estudiantesConInasistenciaSet.add(studentId);
+                                    diasConDatos++;
+                                }
+                            }
+                        });
+                    }
+                } catch (err) {
+                    console.error(`Error obteniendo asistencias para ${dateStr}:`, err);
+                }
+                currentDate.setDate(currentDate.getDate() + 1);
             }
+            
+            const estudiantesConInasistencia = estudiantesConInasistenciaSet.size;
+            const porcentajeInasistencia = totalEstudiantes > 0 
+                ? Math.round((estudiantesConInasistencia / totalEstudiantes) * 100) 
+                : 0;
+            
+            console.log(`📊 Total estudiantes: ${totalEstudiantes}`);
+            console.log(`📊 Estudiantes con inasistencia en últimos 30 días: ${estudiantesConInasistencia}`);
+            console.log(`📊 Porcentaje: ${porcentajeInasistencia}%`);
+            console.log(`📊 Días con datos: ${diasConDatos}`);
+            
+            setStats({
+                totalStudents: totalEstudiantes,
+                totalTeachers: totalTeachers,
+                totalParents: totalParents,
+                todayInasistencia: porcentajeInasistencia
+            });
+            
         } catch (error) {
-            console.error('Error al cargar estadísticas:', error);
+            console.error('❌ Error al cargar estadísticas:', error);
+            setError(error.message);
+        } finally {
+            setLoading(false);
         }
+    };
+    
+    const fetchRecentActivity = async () => {
+        try {
+            const token = localStorage.getItem('token');
+            const activities = [];
+            
+            // Últimas observaciones
+            const obsRes = await fetch('http://localhost:5000/api/observations?limit=5', {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            const obsData = await obsRes.json();
+            
+            if (obsData.success && obsData.data) {
+                obsData.data.forEach(obs => {
+                    let nivelColor = '';
+                    switch(obs.nivel) {
+                        case 'Tipo I':
+                            nivelColor = '#27ae60';
+                            break;
+                        case 'Tipo II':
+                            nivelColor = '#f39c12';
+                            break;
+                        case 'Tipo III':
+                            nivelColor = '#e74c3c';
+                            break;
+                        default:
+                            nivelColor = '#95a5a6';
+                    }
+                    
+                    activities.push({
+                        id: obs._id,
+                        type: 'observation',
+                        title: 'Nueva observación',
+                        description: `${obs.tipo} - ${obs.nivel}`,
+                        student: obs.studentId?.apellido1 || 'Estudiante',
+                        date: obs.createdAt,
+                        nivelColor: nivelColor
+                    });
+                });
+            }
+            
+            // Últimas asistencias
+            const today = new Date().toISOString().split('T')[0];
+            const attendanceRes = await fetch(`http://localhost:5000/api/attendance?date=${today}`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            const attendanceData = await attendanceRes.json();
+            
+            if (attendanceData.success && attendanceData.attendance) {
+                attendanceData.attendance.slice(0, 3).forEach(a => {
+                    let estadoColor = '';
+                    let estadoTexto = '';
+                    switch(a.estado) {
+                        case 'presente':
+                            estadoColor = '#27ae60';
+                            estadoTexto = 'Presente';
+                            break;
+                        case 'ausente':
+                            estadoColor = '#e74c3c';
+                            estadoTexto = 'Ausente';
+                            break;
+                        case 'tarde':
+                            estadoColor = '#f39c12';
+                            estadoTexto = 'Tardanza';
+                            break;
+                        default:
+                            estadoColor = '#95a5a6';
+                            estadoTexto = 'Registro';
+                    }
+                    
+                    activities.push({
+                        id: a._id,
+                        type: 'attendance',
+                        title: 'Asistencia registrada',
+                        description: estadoTexto,
+                        student: a.studentId?.apellido1 || 'Estudiante',
+                        date: a.createdAt,
+                        estadoColor: estadoColor
+                    });
+                });
+            }
+            
+            activities.sort((a, b) => new Date(b.date) - new Date(a.date));
+            setRecentActivity(activities.slice(0, 5));
+            
+        } catch (error) {
+            console.error('Error al cargar actividad reciente:', error);
+        }
+    };
+    
+    const formatDate = (dateString) => {
+        if (!dateString) return '';
+        const date = new Date(dateString);
+        const diffMins = Math.floor((new Date() - date) / 60000);
+        if (diffMins < 60) return `Hace ${diffMins} minutos`;
+        if (diffMins < 1440) return `Hace ${Math.floor(diffMins / 60)} horas`;
+        return `Hace ${Math.floor(diffMins / 1440)} días`;
     };
 
     const renderContent = () => {
         switch(activeSection) {
-            case 'users':
-                return <UserManagement />;
-            case 'students':
-                return <StudentManagement />;
-            case 'teachers':
-                return <TeacherManagement />;
-            case 'attendance':
-                return <AttendanceControl />;
-            case 'reports':
-                return <DisciplineReports />;
-            case 'profile':
-                return <AdminProfile user={user} />;
-            case 'settings':
-                return <SystemSettings />;
-            case 'messages':
-                return <InstitutionalMessaging user={user} />;
-            case 'seguimiento':
-                return <SeguimientoGeneral />;
-            default:
-                return <Overview stats={stats} onRefresh={fetchStats} />;
+            case 'seguimiento': return <AdminSeguimiento />;
+            case 'attendance': return <AdminAttendanceControl />;
+            case 'reports': return <AdminReports />;
+            case 'users': return <AdminUserManagement />;
+            case 'messages': return <AdminMessaging user={user} />;
+            case 'profile': return <AdminProfile user={user} />;
+            case 'settings': return <AdminSettings />;
+            default: return (
+                <div>
+                    <div style={pageStyles.header}>
+                        <h2 style={pageStyles.pageTitle}>Panel de Control</h2>
+                        <button onClick={fetchStats} style={pageStyles.refreshButton}>Actualizar</button>
+                    </div>
+                    
+                    {error && <div style={pageStyles.error}>Error: {error}</div>}
+                    
+                    <div style={pageStyles.statsGrid}>
+                        <div style={pageStyles.statCard}>
+                            <div style={pageStyles.statNumber}>{stats.totalStudents}</div>
+                            <div style={pageStyles.statLabel}>Estudiantes</div>
+                        </div>
+                        <div style={pageStyles.statCard}>
+                            <div style={pageStyles.statNumber}>{stats.totalTeachers}</div>
+                            <div style={pageStyles.statLabel}>Docentes</div>
+                        </div>
+                        <div style={pageStyles.statCard}>
+                            <div style={pageStyles.statNumber}>{stats.totalParents}</div>
+                            <div style={pageStyles.statLabel}>Acudientes</div>
+                        </div>
+                        <div style={pageStyles.statCard}>
+                            <div style={pageStyles.statNumber}>{stats.todayInasistencia}%</div>
+                            <div style={pageStyles.statLabel}>Inasistencia (30 días)</div>
+                        </div>
+                    </div>
+                    
+                    <div style={pageStyles.recentActivity}>
+                        <h3>Actividad Reciente</h3>
+                        <div style={pageStyles.activityList}>
+                            {loading ? (
+                                <p style={pageStyles.placeholder}>Cargando actividades...</p>
+                            ) : recentActivity.length === 0 ? (
+                                <p style={pageStyles.placeholder}>No hay actividad reciente</p>
+                            ) : (
+                                recentActivity.map(activity => (
+                                    <div key={activity.id} style={pageStyles.activityItem}>
+                                        <div style={pageStyles.activityIcon}>
+                                            {activity.type === 'observation' ? '📝' : '📅'}
+                                        </div>
+                                        <div style={pageStyles.activityContent}>
+                                            <div style={pageStyles.activityHeader}>
+                                                <strong style={pageStyles.activityTitle}>{activity.title}</strong>
+                                                <span style={pageStyles.activityDate}>{formatDate(activity.date)}</span>
+                                            </div>
+                                            <div style={pageStyles.activityDescription}>
+                                                <span 
+                                                    style={{
+                                                        ...pageStyles.badge,
+                                                        backgroundColor: activity.nivelColor || activity.estadoColor
+                                                    }}
+                                                >
+                                                    {activity.description}
+                                                </span>
+                                                <span style={pageStyles.activityStudent}>para {activity.student}</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                ))
+                            )}
+                        </div>
+                    </div>
+                </div>
+            );
         }
     };
 
     return (
-        <div style={styles.container}>
-            {/* Sidebar - Menú lateral */}
-            <div style={styles.sidebar}>
-                <div style={styles.sidebarHeader}>
-                    <h2 style={styles.sidebarTitle}>Orizon Cottage</h2>
-                    <p style={styles.userInfo}>{user?.nombre}</p>
-                    <p style={styles.userRole}>Administrador</p>
-                </div>
-
-                <nav style={styles.sidebarNav}>
-                    <div style={styles.navSection}>
-                        <div style={styles.navSectionTitle}>📊 PANEL PRINCIPAL</div>
-                        <button 
-                            style={{...styles.navItem, ...(activeSection === 'seguimiento' && styles.navItemActive)}}
-                            onClick={() => setActiveSection('seguimiento')}
-                        >
-                            📈 Seguimiento General
-                        </button>
-                        <button 
-                            style={{...styles.navItem, ...(activeSection === 'attendance' && styles.navItemActive)}}
-                            onClick={() => setActiveSection('attendance')}
-                        >
-                            📋 Control de Asistencia
-                        </button>
-                        <button 
-                            style={{...styles.navItem, ...(activeSection === 'reports' && styles.navItemActive)}}
-                            onClick={() => setActiveSection('reports')}
-                        >
-                            📊 Reportes
-                        </button>
-                        <button 
-                            style={{...styles.navItem, ...(activeSection === 'messages' && styles.navItemActive)}}
-                            onClick={() => setActiveSection('messages')}
-                        >
-                            💬 Mensajería
-                        </button>
-                    </div>
-
-                    {/* GESTIÓN DE USUARIOS */}
-                    <div style={styles.navSection}>
-                        <div style={styles.navSectionTitle}>👥 GESTIÓN DE USUARIOS</div>
-                        <button 
-                            style={{...styles.navItem, ...(activeSection === 'users' && styles.navItemActive)}}
-                            onClick={() => setActiveSection('users')}
-                        >
-                            👥 Todos los Usuarios
-                        </button>
-                    </div>
-
-                    {/* CONFIGURACIÓN */}
-                    <div style={styles.navSection}>
-                        <div style={styles.navSectionTitle}>⚙️ CONFIGURACIÓN</div>
-                        <button 
-                            style={{...styles.navItem, ...(activeSection === 'profile' && styles.navItemActive)}}
-                            onClick={() => setActiveSection('profile')}
-                        >
-                            👤 Mi Perfil
-                        </button>
-                        <button 
-                            style={{...styles.navItem, ...(activeSection === 'settings' && styles.navItemActive)}}
-                            onClick={() => setActiveSection('settings')}
-                        >
-                            ⚙️ Configuración del Sistema
-                        </button>
-                    </div>
-                </nav>
-                <div style={styles.sidebarFooter}>
-                    <button style={styles.logoutButton} onClick={onLogout}>
-                        🔓 Cerrar Sesión
-                    </button>
-                </div>
-            </div>
-
-            {/* Main Content - Contenido principal */}
-            <div style={styles.mainContent}>
-                {renderContent()}
-            </div>
-        </div>
+        <AdminLayout user={user} onLogout={onLogout} activeSection={activeSection} setActiveSection={setActiveSection}>
+            {renderContent()}
+        </AdminLayout>
     );
 };
 
-// Componente Overview (Resumen)
-const Overview = ({ stats, onRefresh }) => (
-    <div>
-        <div style={styles.header}>
-            <h2 style={styles.pageTitle}>Panel de Control</h2>
-            <button onClick={onRefresh} style={styles.refreshButton}>
-                🔄 Actualizar
-            </button>
-        </div>
-        
-        <div style={styles.statsGrid}>
-            <div style={styles.statCard}>
-                <div style={styles.statIcon}>🧑‍🎓</div>
-                <div>
-                    <h3 style={styles.statNumber}>{stats.totalStudents}</h3>
-                    <p style={styles.statLabel}>Estudiantes</p>
-                </div>
-            </div>
-            
-            <div style={styles.statCard}>
-                <div style={styles.statIcon}>👨‍🏫</div>
-                <div>
-                    <h3 style={styles.statNumber}>{stats.totalTeachers}</h3>
-                    <p style={styles.statLabel}>Docentes</p>
-                </div>
-            </div>
-            
-            <div style={styles.statCard}>
-                <div style={styles.statIcon}>👪</div>
-                <div>
-                    <h3 style={styles.statNumber}>{stats.totalParents}</h3>
-                    <p style={styles.statLabel}>Acudientes</p>
-                </div>
-            </div>
-            
-            <div style={styles.statCard}>
-                <div style={styles.statIcon}>📋</div>
-                <div>
-                    <h3 style={styles.statNumber}>{stats.todayAttendance}%</h3>
-                    <p style={styles.statLabel}>Asistencia Hoy</p>
-                </div>
-            </div>
-            
-            <div style={styles.statCard}>
-                <div style={styles.statIcon}>⚠️</div>
-                <div>
-                    <h3 style={styles.statNumber}>{stats.pendingObservations}</h3>
-                    <p style={styles.statLabel}>Observaciones Pendientes</p>
-                </div>
-            </div>
-            
-            <div style={styles.statCard}>
-                <div style={styles.statIcon}>💬</div>
-                <div>
-                    <h3 style={styles.statNumber}>{stats.unreadMessages}</h3>
-                    <p style={styles.statLabel}>Mensajes No Leídos</p>
-                </div>
-            </div>
-        </div>
-
-        <div style={styles.recentActivity}>
-            <h3>Actividad Reciente</h3>
-            <div style={styles.activityList}>
-                <p style={styles.placeholder}>Cargando actividades...</p>
-            </div>
-        </div>
-    </div>
-);
-
-const styles = {
-    container: {
-        display: 'flex',
-        minHeight: '100vh',
-        backgroundColor: '#f5f5f5'
-    },
-    sidebar: {
-        width: '280px',
-        backgroundColor: '#2c3e50',
-        color: 'white',
-        display: 'flex',
-        flexDirection: 'column',
-        position: 'fixed',
-        top: 0,
-        left: 0,
-        bottom: 0,
-        overflowY: 'auto'
-    },
-    sidebarHeader: {
-        padding: '30px 20px',
-        textAlign: 'center',
-        borderBottom: '1px solid #34495e'
-    },
-    sidebarTitle: {
-        margin: '0 0 10px 0',
-        color: '#27ae60',
-        fontSize: '20px'
-    },
-    userInfo: {
-        margin: '5px 0',
-        fontSize: '16px',
-        fontWeight: 'bold'
-    },
-    userRole: {
-        margin: 0,
-        fontSize: '14px',
-        color: '#27ae60',
-        opacity: 0.8
-    },
-    sidebarNav: {
-        flex: 1,
-        padding: '20px 0'
-    },
-    navItem: {
-        display: 'block',
-        width: '100%',
-        padding: '12px 25px',
-        border: 'none',
-        background: 'none',
-        color: '#ecf0f1',
-        textAlign: 'left',
-        fontSize: '15px',
-        cursor: 'pointer',
-        transition: 'all 0.3s',
-        borderLeft: '3px solid transparent'
-    },
-    navItemActive: {
-        backgroundColor: '#34495e',
-        borderLeftColor: '#27ae60',
-        color: '#27ae60'
-    },
-    navSection: {
-        marginBottom: '20px'
-    },
-    navSectionTitle: {
-        padding: '10px 20px',
-        fontSize: '11px',
-        fontWeight: 'bold',
-        color: '#7f8c8d',
-        textTransform: 'uppercase',
-        letterSpacing: '1px'
-    },
-    sidebarFooter: {
-        padding: '20px',
-        borderTop: '1px solid #34495e'
-    },
-    logoutButton: {
-        width: '100%',
-        padding: '10px',
-        backgroundColor: '#e74c3c',
-        color: 'white',
-        border: 'none',
-        borderRadius: '5px',
-        cursor: 'pointer',
-        fontSize: '14px',
-        transition: 'background-color 0.3s'
-    },
-    mainContent: {
-        flex: 1,
-        marginLeft: '280px',
-        padding: '30px',
-        backgroundColor: '#f5f5f5'
-    },
+const pageStyles = {
     header: {
         display: 'flex',
         justifyContent: 'space-between',
@@ -322,52 +309,112 @@ const styles = {
     pageTitle: {
         margin: 0,
         color: '#2c3e50',
-        fontSize: '24px'
+        fontSize: '24px',
+        fontWeight: '600'
     },
     refreshButton: {
-        padding: '8px 15px',
+        padding: '8px 16px',
         backgroundColor: '#27ae60',
         color: 'white',
         border: 'none',
-        borderRadius: '5px',
+        borderRadius: '6px',
         cursor: 'pointer',
-        fontSize: '14px'
+        fontSize: '14px',
+        fontWeight: '500'
+    },
+    error: {
+        backgroundColor: '#fff5f5',
+        color: '#c53030',
+        padding: '12px',
+        borderRadius: '8px',
+        marginBottom: '20px',
+        border: '1px solid #feb2b2'
     },
     statsGrid: {
         display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+        gridTemplateColumns: 'repeat(4, 1fr)',
         gap: '20px',
         marginBottom: '40px'
     },
     statCard: {
         backgroundColor: 'white',
-        padding: '20px',
-        borderRadius: '10px',
-        boxShadow: '0 2px 10px rgba(0,0,0,0.1)',
-        display: 'flex',
-        alignItems: 'center',
-        gap: '15px',
-        transition: 'transform 0.3s',
-        cursor: 'pointer'
-    },
-    statIcon: {
-        fontSize: '40px'
+        padding: '24px',
+        borderRadius: '12px',
+        boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
+        textAlign: 'center',
+        transition: 'transform 0.2s, box-shadow 0.2s',
+        cursor: 'pointer',
+        ':hover': {
+            transform: 'translateY(-4px)',
+            boxShadow: '0 8px 16px rgba(0,0,0,0.1)'
+        }
     },
     statNumber: {
-        margin: '0 0 5px 0',
-        fontSize: '24px',
-        color: '#2c3e50'
+        fontSize: '36px',
+        fontWeight: 'bold',
+        color: '#2c3e50',
+        marginBottom: '8px'
     },
     statLabel: {
-        margin: 0,
-        color: '#7f8c8d',
-        fontSize: '14px'
+        fontSize: '14px',
+        color: '#7f8c8d'
     },
     recentActivity: {
         backgroundColor: 'white',
-        padding: '25px',
-        borderRadius: '10px',
-        boxShadow: '0 2px 10px rgba(0,0,0,0.1)'
+        padding: '24px',
+        borderRadius: '12px',
+        boxShadow: '0 2px 8px rgba(0,0,0,0.08)'
+    },
+    activityList: {
+        marginTop: '15px'
+    },
+    activityItem: {
+        display: 'flex',
+        gap: '16px',
+        padding: '16px 0',
+        borderBottom: '1px solid #ecf0f1'
+    },
+    activityIcon: {
+        fontSize: '28px',
+        width: '40px',
+        textAlign: 'center'
+    },
+    activityContent: {
+        flex: 1
+    },
+    activityHeader: {
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: '8px',
+        flexWrap: 'wrap',
+        gap: '8px'
+    },
+    activityTitle: {
+        fontSize: '15px',
+        color: '#2c3e50'
+    },
+    activityDate: {
+        fontSize: '12px',
+        color: '#95a5a6'
+    },
+    activityDescription: {
+        display: 'flex',
+        alignItems: 'center',
+        gap: '8px',
+        flexWrap: 'wrap'
+    },
+    badge: {
+        display: 'inline-block',
+        padding: '4px 12px',
+        borderRadius: '20px',
+        color: 'white',
+        fontSize: '12px',
+        fontWeight: '500'
+    },
+    activityStudent: {
+        fontSize: '13px',
+        color: '#7f8c8d'
     },
     placeholder: {
         textAlign: 'center',

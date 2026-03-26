@@ -6,19 +6,14 @@ import {
   getSentMessages,
   markAsRead
 } from "../Logic/message.controller.js";
+import { verifyToken } from "../Middleware/auth.middleware.js";
 
 const router = express.Router();
 
-// Crear mensaje
-router.post("/", createMessage);
-
-// Mensajes recibidos por un usuario
-router.get("/received/:userId", getReceivedMessages);
-
-// Mensajes enviados por un usuario
-router.get("/sent/:userId", getSentMessages);
-
-// Marcar mensaje como leído
-router.put("/read/:messageId", markAsRead);
+// Todas las rutas requieren autenticación
+router.post("/", verifyToken, createMessage);
+router.get("/received/:userId", verifyToken, getReceivedMessages);
+router.get("/sent/:userId", verifyToken, getSentMessages);
+router.put("/read/:messageId", verifyToken, markAsRead);
 
 export default router;

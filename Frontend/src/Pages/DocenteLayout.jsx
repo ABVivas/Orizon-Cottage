@@ -45,6 +45,23 @@ const DocenteLayout = ({ user, onLogout, activeSection, setActiveSection, childr
                         </button>
                     )}
 
+                    {/* Logo Orizon Cottage */}
+                    <div style={styles.logoContainer}>
+                        <img 
+                            src="/images/logo-orizon.jpeg" 
+                            alt="Orizon Cottage" 
+                            style={styles.logo}
+                            onError={(e) => {
+                                e.target.onerror = null;
+                                e.target.style.display = 'none';
+                                const fallback = document.createElement('span');
+                                fallback.innerHTML = '🏫';
+                                fallback.style.fontSize = '28px';
+                                e.target.parentElement.appendChild(fallback);
+                            }}
+                        />
+                    </div>
+
                     <div>
                         <h1 style={styles.title}>Orizon Cottage</h1>
                         <p style={styles.subtitle}>Gestión de Convivencia</p>
@@ -53,7 +70,25 @@ const DocenteLayout = ({ user, onLogout, activeSection, setActiveSection, childr
                 </div>
 
                 <div style={styles.userArea}>
-                    <span style={styles.userName}>👤 {user?.nombre}</span>
+
+                    {/* Logo Institución Educativa La Cabaña */}
+                    <div style={styles.schoolLogoContainer}>
+                        <img 
+                            src="/images/logo-cabana.png" 
+                            alt="I.E. La Cabaña" 
+                            style={styles.schoolLogo}
+                            onError={(e) => {
+                                e.target.onerror = null;
+                                e.target.style.display = 'none';
+                                const fallback = document.createElement('span');
+                                fallback.innerHTML = '📚';
+                                fallback.style.fontSize = '24px';
+                                e.target.parentElement.appendChild(fallback);
+                            }}
+                        />
+                    </div>
+
+                    <span style={styles.userName}>👤 {user?.nombre?.split(' ')[0] || 'Docente'}</span>
                     <span style={styles.userRole}>{user?.rol}</span>
 
                     <button
@@ -164,14 +199,28 @@ const styles = {
         cursor: "pointer"
     },
 
+    logoContainer: {
+        width: "40px",
+        height: "40px",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center"
+    },
+
+    logo: {
+        maxWidth: "40px",
+        maxHeight: "40px",
+        objectFit: "contain"
+    },
+
     title: {
         margin: 0,
-        fontSize: "20px"
+        fontSize: "18px"
     },
 
     subtitle: {
         margin: 0,
-        fontSize: "12px",
+        fontSize: "10px",
         opacity: 0.9
     },
 
@@ -179,6 +228,20 @@ const styles = {
         display: "flex",
         alignItems: "center",
         gap: "12px"
+    },
+
+    schoolLogoContainer: {
+        width: "35px",
+        height: "35px",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center"
+    },
+
+    schoolLogo: {
+        maxWidth: "35px",
+        maxHeight: "35px",
+        objectFit: "contain"
     },
 
     userName: {
