@@ -15,7 +15,6 @@ const AdminLayout = ({ user, onLogout, activeSection, setActiveSection, children
         return () => window.removeEventListener("resize", handleResize);
     }, []);
 
-    // MENÚ CORREGIDO - ELIMINADO EL ITEM DE MENSAJERÍA
     const menuItems = [
         { id: "overview", label: "Panel de Control", icon: "📊" },
         { id: "seguimiento", label: "Seguimiento General", icon: "📈" },
@@ -30,16 +29,15 @@ const AdminLayout = ({ user, onLogout, activeSection, setActiveSection, children
         <div style={styles.container}>
             <div style={styles.topBar}>
                 <div style={styles.leftTopBar}>
-                    {isMobile && <button style={styles.menuButton} onClick={() => setMenuOpen(!menuOpen)}>☰</button>}
+                    {isMobile && (
+                        <button style={styles.menuButton} onClick={() => setMenuOpen(!menuOpen)}>☰</button>
+                    )}
                     <div style={styles.logoContainer}>
-                        <img src="/images/logo-orizon.jpeg" alt="Orizon Cottage" style={styles.logo} onError={(e) => {
-                            e.target.onerror = null;
-                            e.target.style.display = 'none';
-                            const fallback = document.createElement('span');
-                            fallback.innerHTML = '🏫';
-                            fallback.style.fontSize = '28px';
-                            e.target.parentElement.appendChild(fallback);
-                        }} />
+                        <img 
+                            src="/images/logo-oorizon.png" 
+                            alt="Orizon Cottage" 
+                            style={styles.logo}
+                        />
                     </div>
                     <div>
                         <h1 style={styles.title}>Orizon Cottage</h1>
@@ -48,14 +46,11 @@ const AdminLayout = ({ user, onLogout, activeSection, setActiveSection, children
                 </div>
                 <div style={styles.userArea}>
                     <div style={styles.schoolLogoContainer}>
-                        <img src="/images/logo-cabana.png" alt="I.E. La Cabaña" style={styles.schoolLogo} onError={(e) => {
-                            e.target.onerror = null;
-                            e.target.style.display = 'none';
-                            const fallback = document.createElement('span');
-                            fallback.innerHTML = '📚';
-                            fallback.style.fontSize = '24px';
-                            e.target.parentElement.appendChild(fallback);
-                        }} />
+                        <img 
+                            src="/images/logo-cabana.png" 
+                            alt="I.E. La Cabaña" 
+                            style={styles.schoolLogo}
+                        />
                     </div>
                     <span style={styles.userName}>👤 {user?.nombre?.split(' ')[0] || 'Admin'}</span>
                     <span style={styles.userRole}>{user?.rol}</span>
@@ -135,15 +130,15 @@ const styles = {
         cursor: "pointer"
     },
     logoContainer: {
-        width: "40px",
-        height: "40px",
+        width: "70px",
+        height: "70px",
         display: "flex",
         alignItems: "center",
         justifyContent: "center"
     },
     logo: {
-        maxWidth: "40px",
-        maxHeight: "40px",
+        width: "70px",
+        height: "70px",
         objectFit: "contain"
     },
     title: {
@@ -161,15 +156,15 @@ const styles = {
         gap: "12px"
     },
     schoolLogoContainer: {
-        width: "35px",
-        height: "35px",
+        width: "45px",
+        height: "45px",
         display: "flex",
         alignItems: "center",
         justifyContent: "center"
     },
     schoolLogo: {
-        maxWidth: "35px",
-        maxHeight: "35px",
+        width: "45px",
+        height: "45px",
         objectFit: "contain"
     },
     userName: {

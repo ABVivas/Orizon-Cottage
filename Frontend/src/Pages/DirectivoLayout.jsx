@@ -16,7 +16,6 @@ const DirectivoLayout = ({ user, onLogout, activeSection, setActiveSection, chil
         return () => window.removeEventListener("resize", handleResize);
     }, []);
 
-    // Escuchar eventos de cambio de sección desde otros componentes
     useEffect(() => {
         const handleSectionChange = (event) => {
             if (event.detail && event.detail.section) {
@@ -29,7 +28,6 @@ const DirectivoLayout = ({ user, onLogout, activeSection, setActiveSection, chil
         return () => window.removeEventListener('changeSection', handleSectionChange);
     }, [setActiveSection, isMobile]);
 
-    // Cargar configuración y filtrar menú
     useEffect(() => {
         const loadSettings = () => {
             const savedSettings = localStorage.getItem('adminSettings');
@@ -51,10 +49,9 @@ const DirectivoLayout = ({ user, onLogout, activeSection, setActiveSection, chil
                 { id: "mensajeria", label: "Mensajería", icon: "💬" }
             ];
             
-            // Filtrar según configuración
             const filtered = allItems.filter(item => {
                 if (item.id === "mensajeria") return settings.enableMessaging;
-                return true; // todos los demás siempre visibles para directivo
+                return true;
             });
             
             setMenuItems(filtered);
@@ -72,12 +69,18 @@ const DirectivoLayout = ({ user, onLogout, activeSection, setActiveSection, chil
 
     return (
         <div style={styles.container}>
-            {/* TOP BAR */}
             <div style={styles.topBar}>
                 <div style={styles.leftTopBar}>
                     {isMobile && (
                         <button style={styles.menuButton} onClick={() => setMenuOpen(!menuOpen)}>☰</button>
                     )}
+                    <div style={styles.logoContainer}>
+                        <img 
+                            src="/images/logo-oorizon.png" 
+                            alt="Orizon Cottage" 
+                            style={styles.logo}
+                        />
+                    </div>
                     <div>
                         <h1 style={styles.title}>Orizon Cottage</h1>
                         <p style={styles.subtitle}>Gestión de Convivencia</p>
@@ -89,10 +92,7 @@ const DirectivoLayout = ({ user, onLogout, activeSection, setActiveSection, chil
                     <button style={styles.logoutButton} onClick={onLogout}>Cerrar Sesión</button>
                 </div>
             </div>
-
-            {/* MAIN AREA */}
             <div style={styles.mainContainer}>
-                {/* SIDEBAR */}
                 <div style={{
                     ...styles.sidebar,
                     ...(isMobile && {
@@ -125,11 +125,7 @@ const DirectivoLayout = ({ user, onLogout, activeSection, setActiveSection, chil
                         ))}
                     </ul>
                 </div>
-
-                {/* OVERLAY MOBILE */}
                 {isMobile && menuOpen && <div style={styles.overlay} onClick={() => setMenuOpen(false)} />}
-
-                {/* CONTENT */}
                 <div style={styles.content}>{children}</div>
             </div>
         </div>
@@ -141,6 +137,8 @@ const styles = {
     topBar: { height: "70px", backgroundColor: "#27ae60", color: "white", display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 20px", position: "sticky", top: 0, zIndex: 200 },
     leftTopBar: { display: "flex", alignItems: "center", gap: "15px" },
     menuButton: { fontSize: "24px", border: "none", background: "transparent", color: "white", cursor: "pointer" },
+    logoContainer: { width: "70px", height: "70px", display: "flex", alignItems: "center", justifyContent: "center" },
+    logo: { width: "70px", height: "70px", objectFit: "contain" },
     title: { margin: 0, fontSize: "20px" },
     subtitle: { margin: 0, fontSize: "12px", opacity: 0.9 },
     userArea: { display: "flex", alignItems: "center", gap: "12px" },
