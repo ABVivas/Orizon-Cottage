@@ -21,9 +21,37 @@ const DirectivoReportes = () => {
     const [showPreview, setShowPreview] = useState(false);
     const [recentReports, setRecentReports] = useState([]);
     const [currentPage, setCurrentPage] = useState(1);
+    const [usersMap, setUsersMap] = useState({}); // Mapa de usuarios por ID
     const itemsPerPage = 10;
 
     const availableCourses = ['todos', '0°', '1°', '2°', '3°', '4°', '5°', '6°', '7°', '8°', '9°', '10°', '11°'];
+
+    // Cargar usuarios para obtener nombres de registradores
+    useEffect(() => {
+        const fetchUsers = async () => {
+            try {
+                const token = localStorage.getItem('token');
+                const response = await fetch('http://localhost:5000/api/users', {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                const data = await response.json();
+                if (data.success) {
+                    const map = {};
+                    data.users.forEach(user => {
+                        map[user._id] = user.nombre;
+                        // También mapear por numeroIdentificacion por si acaso
+                        if (user.numeroIdentificacion) {
+                            map[user.numeroIdentificacion] = user.nombre;
+                        }
+                    });
+                    setUsersMap(map);
+                }
+            } catch (error) {
+                console.error('Error fetching users:', error);
+            }
+        };
+        fetchUsers();
+    }, []);
 
     useEffect(() => {
         const savedReports = localStorage.getItem('directivoRecentReports');
@@ -73,6 +101,17 @@ const DirectivoReportes = () => {
             };
         }
         return { nombre: 'N/A', grado: 'N/A' };
+    };
+
+    // Función para obtener el nombre del registrador a partir del ID
+    const getRegistradorNombre = (registradoPor) => {
+        if (!registradoPor || registradoPor === '-') return '-';
+        // Si ya es un nombre (no parece un ObjectId), devolverlo
+        if (registradoPor.length < 24 || !registradoPor.match(/^[0-9a-fA-F]{24}$/)) {
+            return registradoPor;
+        }
+        // Buscar en el mapa de usuarios
+        return usersMap[registradoPor] || registradoPor;
     };
 
     const formatFecha = (fechaString) => {
@@ -175,7 +214,7 @@ const DirectivoReportes = () => {
                         estado: estadoMap[record.estado] || record.estado || 'Sin registrar',
                         motivo: motivoMap[record.motivo] || record.motivo || '-',
                         observaciones: record.observacion || '-',
-                        registradoPor: record.registradoPor || '-'
+                        registradoPor: getRegistradorNombre(record.registradoPor)
                     };
                 });
                 
@@ -243,7 +282,8 @@ const DirectivoReportes = () => {
                         estudiante: info.nombre,
                         grado: info.grado,
                         detalle: estadoMap[record.estado] || record.estado || 'Sin registrar',
-                        observaciones: record.observacion || '-'
+                        observaciones: record.observacion || '-',
+                        registradoPor: getRegistradorNombre(record.registradoPor)
                     };
                 });
                 
@@ -477,10 +517,10 @@ const DirectivoReportes = () => {
                                         <tr style={styles.tableHeader}>
                                             {Object.keys(paginatedData[0]).map(key => (
                                                 <th key={key} style={styles.th}>
-                                                    {key.charAt(0).toUpperCase() + key.slice(1)}
+                                                    {key === 'registradoPor' ? 'Registrado por' : key.charAt(0).toUpperCase() + key.slice(1)}
                                                 </th>
                                             ))}
-                                         </tr>
+                                          </tr>
                                     </thead>
                                     <tbody>
                                         {paginatedData.map((item, idx) => (
@@ -490,9 +530,9 @@ const DirectivoReportes = () => {
                                                         {typeof value === 'string' && value.length > 50 
                                                             ? value.substring(0, 47) + '...' 
                                                             : value}
-                                                     </td>
+                                                      </td>
                                                 ))}
-                                             </tr>
+                                              </tr>
                                         ))}
                                     </tbody>
                                 </table>

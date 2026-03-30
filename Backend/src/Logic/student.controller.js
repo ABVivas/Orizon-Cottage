@@ -1,11 +1,92 @@
 // Backend/src/Logic/student.controller.js
-// Backend/src/Logic/student.controller.js
 import Student from '../Data/student.model.js';
 import mongoose from 'mongoose';
 
 // ===========================================
-// FUNCIONES EXISTENTES (DEBEN ESTAR PRIMERO)
+// CREAR NUEVO ESTUDIANTE (NUEVA FUNCIÓN)
 // ===========================================
+export const createStudent = async (req, res) => {
+    try {
+        const {
+            id_estudiante,
+            apellido1,
+            grado,
+            grado_especifico,
+            nombre_acudiente,
+            cedula_padre,
+            telefono,
+            vereda,
+            parentesco,
+            tipo_documento_estudiante,
+            fecha_nacimiento
+        } = req.body;
+
+        console.log('📝 Creando nuevo estudiante:', { id_estudiante, apellido1, grado_especifico });
+
+        // Validar campos obligatorios
+        if (!id_estudiante || !apellido1) {
+            return res.status(400).json({
+                success: false,
+                message: 'ID del estudiante y nombre son obligatorios'
+            });
+        }
+
+        // Verificar si ya existe un estudiante con ese ID
+        const existingStudent = await Student.findOne({ id_estudiante });
+        if (existingStudent) {
+            return res.status(400).json({
+                success: false,
+                message: 'Ya existe un estudiante con este ID'
+            });
+        }
+
+        // Determinar grado general si no viene
+        let gradoGeneral = grado;
+        if (!gradoGeneral && grado_especifico) {
+            if (grado_especifico === '0°') {
+                gradoGeneral = 'preescolar';
+            } else if (['1°', '2°', '3°', '4°', '5°'].includes(grado_especifico)) {
+                gradoGeneral = 'primaria';
+            } else if (['6°', '7°', '8°', '9°', '10°', '11°'].includes(grado_especifico)) {
+                gradoGeneral = 'secundaria';
+            } else {
+                gradoGeneral = 'primaria';
+            }
+        }
+
+        // Crear el estudiante
+        const newStudent = new Student({
+            id_estudiante: id_estudiante,
+            apellido1: apellido1,
+            grado: gradoGeneral || 'primaria',
+            grado_especifico: grado_especifico || '1°',
+            nombre_acudiente: nombre_acudiente || '',
+            cedula_padre: cedula_padre || '',
+            telefono: telefono || '',
+            vereda: vereda || 'LA CABAÑA',
+            parentesco: parentesco || 'PADRE',
+            tipo_documento_estudiante: tipo_documento_estudiante || 'RC',
+            fecha_nacimiento: fecha_nacimiento || ''
+        });
+
+        await newStudent.save();
+
+        console.log('✅ Estudiante creado:', newStudent._id);
+
+        res.status(201).json({
+            success: true,
+            message: 'Estudiante creado exitosamente',
+            data: newStudent
+        });
+
+    } catch (error) {
+        console.error('❌ Error al crear estudiante:', error);
+        res.status(500).json({
+            success: false,
+            message: error.message
+        });
+    }
+};
 
 // Obtener todos los estudiantes
 export const getStudents = async (req, res) => {
@@ -92,11 +173,7 @@ export const getStudentsByGrade = async (req, res) => {
     }
 };
 
-// ===========================================
-// FUNCIONES NUEVAS PARA DASHBOARDS
-// ===========================================
-
-// Obtener estudiantes por docente (basado en los grados que enseña)
+// Obtener estudiantes por docente
 export const getStudentsByTeacher = async (req, res) => {
     try {
         const { docenteId } = req.params;
@@ -104,18 +181,14 @@ export const getStudentsByTeacher = async (req, res) => {
 
         console.log('🔍 Buscando estudiantes para docente ID:', docenteId);
 
-        // 1. Buscar información del docente en users
         let docente;
-        
-        // Verificar si docenteId es un ObjectId válido
         if (mongoose.Types.ObjectId.isValid(docenteId)) {
-            docente = await db.collection('users').findOne({ 
+            docente = await db.collection('users').findOne({
                 _id: new mongoose.Types.ObjectId(docenteId),
                 rol: 'docente'
             });
         } else {
-            // Buscar por número de identificación
-            docente = await db.collection('users').findOne({ 
+            docente = await db.collection('users').findOne({
                 numeroIdentificacion: docenteId,
                 rol: 'docente'
             });
@@ -128,49 +201,27 @@ export const getStudentsByTeacher = async (req, res) => {
             });
         }
 
-        console.log('✅ Docente encontrado:', docente.nombre);
-        console.log('📊 Datos completos del docente:', docente);
-
-        // 2. Obtener los grados que enseña este docente
         let gradosDocente = [];
-
-        // Opción 1: Desde cursosAsignados (recomendado)
         if (docente.cursosAsignados && docente.cursosAsignados.length > 0) {
             gradosDocente = docente.cursosAsignados;
-            console.log('📚 Grados desde cursosAsignados:', gradosDocente);
         }
 
-        // Opción 2: De la colección teachers (por nombre) - respaldo
         if (gradosDocente.length === 0) {
             const teacherInfo = await db.collection('teachers').findOne({
                 docente: docente.nombre
             });
-
             if (teacherInfo?.grados) {
-                // Procesar grados que pueden venir como "6°, 7°, 8°, 9°" o "6,7,8,9"
                 const gradosString = teacherInfo.grados;
                 if (typeof gradosString === 'string') {
                     gradosDocente = gradosString
                         .split(',')
                         .map(g => g.trim())
                         .map(g => g.includes('°') ? g : g + '°');
-                } else if (Array.isArray(teacherInfo.grados)) {
-                    gradosDocente = teacherInfo.grados.map(g => 
-                        g.toString().includes('°') ? g.toString() : g.toString() + '°'
-                    );
                 }
-                console.log('📚 Grados desde teachers:', gradosDocente);
             }
         }
 
-        // Opción 3: Desde metadata
-        if (gradosDocente.length === 0 && docente.metadata?.grados) {
-            gradosDocente = docente.metadata.grados;
-            console.log('📚 Grados desde metadata:', gradosDocente);
-        }
-
         if (gradosDocente.length === 0) {
-            console.log('⚠️ El docente no tiene grados asignados');
             return res.json({
                 success: true,
                 count: 0,
@@ -180,16 +231,10 @@ export const getStudentsByTeacher = async (req, res) => {
             });
         }
 
-        // 3. Buscar estudiantes en esos grados
-        console.log('🔎 Buscando estudiantes en grados:', gradosDocente);
-        
         const estudiantes = await Student.find({
             grado_especifico: { $in: gradosDocente }
         });
 
-        console.log(`✅ Encontrados ${estudiantes.length} estudiantes para el docente`);
-
-        // 4. Calcular estadísticas básicas (opcional)
         const stats = {
             total: estudiantes.length,
             porGrado: {}
@@ -217,11 +262,7 @@ export const getStudentsByTeacher = async (req, res) => {
     }
 };
 
-// ===========================================
-// FUNCIÓN ACTUALIZADA PARA ACUDIENTES
-// ===========================================
-
-// Obtener estudiantes por acudiente (por cédula) - VERSIÓN MEJORADA
+// Obtener estudiantes por acudiente
 export const getStudentsByParent = async (req, res) => {
     try {
         const { cedulaPadre } = req.params;
@@ -229,22 +270,16 @@ export const getStudentsByParent = async (req, res) => {
 
         console.log('🔍 Buscando estudiantes para acudiente con cédula:', cedulaPadre);
 
-        // 1. Buscar el acudiente en users
         const acudiente = await db.collection('users').findOne({
             numeroIdentificacion: cedulaPadre,
             rol: 'acudiente'
         });
 
         if (!acudiente) {
-            console.log('⚠️ Acudiente no encontrado en users, buscando directamente en students...');
-            
-            // Fallback: buscar directamente por cedula_padre en students
             const estudiantesDirectos = await Student.find({
                 cedula_padre: cedulaPadre
             });
-
             if (estudiantesDirectos.length > 0) {
-                console.log(`✅ Encontrados ${estudiantesDirectos.length} estudiantes por búsqueda directa`);
                 return res.json({
                     success: true,
                     count: estudiantesDirectos.length,
@@ -252,7 +287,6 @@ export const getStudentsByParent = async (req, res) => {
                     source: 'direct'
                 });
             }
-
             return res.json({
                 success: true,
                 count: 0,
@@ -261,34 +295,21 @@ export const getStudentsByParent = async (req, res) => {
             });
         }
 
-        console.log('✅ Acudiente encontrado:', acudiente.nombre);
-        console.log('📚 Estudiantes asociados en users:', acudiente.estudiantesAsociados?.length || 0);
-
-        // 2. Obtener los IDs de los estudiantes asociados
         const estudiantesIds = acudiente.estudiantesAsociados || [];
 
         if (estudiantesIds.length === 0) {
-            console.log('⚠️ El acudiente no tiene estudiantes asociados en users');
-            
-            // Fallback: buscar directamente por cedula_padre
             const estudiantesDirectos = await Student.find({
                 cedula_padre: cedulaPadre
             });
-
             if (estudiantesDirectos.length > 0) {
-                console.log(`✅ Encontrados ${estudiantesDirectos.length} estudiantes por búsqueda directa`);
-                
-                // Actualizar el acudiente con estos estudiantes
                 await db.collection('users').updateOne(
                     { _id: acudiente._id },
-                    { 
-                        $set: { 
+                    {
+                        $set: {
                             estudiantesAsociados: estudiantesDirectos.map(e => e._id)
                         }
                     }
                 );
-                console.log('🔄 Acudiente actualizado con estudiantes');
-
                 return res.json({
                     success: true,
                     count: estudiantesDirectos.length,
@@ -296,7 +317,6 @@ export const getStudentsByParent = async (req, res) => {
                     source: 'direct-updated'
                 });
             }
-
             return res.json({
                 success: true,
                 count: 0,
@@ -305,12 +325,9 @@ export const getStudentsByParent = async (req, res) => {
             });
         }
 
-        // 3. Buscar la información completa de los estudiantes
         const estudiantes = await Student.find({
             _id: { $in: estudiantesIds }
         });
-
-        console.log(`✅ Encontrados ${estudiantes.length} estudiantes para el acudiente`);
 
         res.json({
             success: true,
@@ -328,49 +345,79 @@ export const getStudentsByParent = async (req, res) => {
     }
 };
 
-// ===========================================
-// NUEVA FUNCIÓN: ACTUALIZAR ESTUDIANTE
-// ===========================================
+// Actualizar estudiante
 export const updateStudent = async (req, res) => {
     try {
         const { id } = req.params;
         const updateData = req.body;
-        
+
         console.log('📝 Actualizando estudiante ID:', id);
-        console.log('📝 Datos a actualizar:', updateData);
-        
-        // Validar que el ID sea válido
+
         if (!mongoose.Types.ObjectId.isValid(id)) {
             return res.status(400).json({
                 success: false,
                 message: 'ID de estudiante inválido'
             });
         }
-        
-        // Buscar y actualizar el estudiante
+
         const updatedStudent = await Student.findByIdAndUpdate(
             id,
             { $set: updateData },
             { new: true, runValidators: true }
         );
-        
+
         if (!updatedStudent) {
             return res.status(404).json({
                 success: false,
                 message: 'Estudiante no encontrado'
             });
         }
-        
+
         console.log('✅ Estudiante actualizado:', updatedStudent._id);
-        
+
         res.json({
             success: true,
             message: 'Estudiante actualizado exitosamente',
             data: updatedStudent
         });
-        
+
     } catch (error) {
         console.error('❌ Error al actualizar estudiante:', error);
+        res.status(500).json({
+            success: false,
+            message: error.message
+        });
+    }
+};
+
+// Eliminar estudiante
+export const deleteStudent = async (req, res) => {
+    try {
+        const { id } = req.params;
+
+        if (!mongoose.Types.ObjectId.isValid(id)) {
+            return res.status(400).json({
+                success: false,
+                message: 'ID de estudiante inválido'
+            });
+        }
+
+        const deletedStudent = await Student.findByIdAndDelete(id);
+
+        if (!deletedStudent) {
+            return res.status(404).json({
+                success: false,
+                message: 'Estudiante no encontrado'
+            });
+        }
+
+        res.json({
+            success: true,
+            message: 'Estudiante eliminado exitosamente'
+        });
+
+    } catch (error) {
+        console.error('❌ Error al eliminar estudiante:', error);
         res.status(500).json({
             success: false,
             message: error.message

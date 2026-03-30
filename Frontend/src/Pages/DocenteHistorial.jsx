@@ -1,5 +1,4 @@
 // Frontend/src/Pages/DocenteHistorial.jsx
-// Frontend/src/Pages/DocenteHistorial.jsx
 import { useState, useEffect } from 'react';
 
 const DocenteHistorial = ({ user }) => {
@@ -17,6 +16,12 @@ const DocenteHistorial = ({ user }) => {
     useEffect(() => {
         setCurrentPage(1);
     }, [activeTab]);
+
+    // Función para obtener la URL del documento
+    const getDocumentUrl = (filename) => {
+        if (!filename) return null;
+        return `http://localhost:5000/api/download/${encodeURIComponent(filename)}`;
+    };
 
     const fetchHistorial = async () => {
         try {
@@ -72,7 +77,7 @@ const DocenteHistorial = ({ user }) => {
             });
             const obsData = await obsRes.json();
             
-            // Procesar las observaciones
+            // Procesar las observaciones incluyendo los documentos
             const processedObservaciones = (obsData.data || []).map(item => {
                 const student = item.studentId || {};
                 const fecha = new Date(item.fecha);
@@ -82,6 +87,13 @@ const DocenteHistorial = ({ user }) => {
                     'Disciplinaria': 'Disciplinaria',
                     'General': 'General'
                 };
+                
+                // Extraer el nombre del archivo de la URL si existe
+                let documentoFilename = null;
+                if (item.documentoPlan && item.documentoPlan.url) {
+                    const urlParts = item.documentoPlan.url.split('/');
+                    documentoFilename = urlParts[urlParts.length - 1];
+                }
                 
                 return {
                     _id: item._id,
@@ -93,7 +105,10 @@ const DocenteHistorial = ({ user }) => {
                     tipoTexto: tipoMap[item.tipo] || item.tipo || 'General',
                     nivel: item.nivel || 'No especificado',
                     descripcion: item.descripcion || '',
-                    planMejora: item.planMejora || ''
+                    planMejora: item.planMejora || '',
+                    documentoUrl: item.documentoPlan?.url,
+                    documentoNombre: item.documentoPlan?.nombre,
+                    documentoFilename: documentoFilename
                 };
             });
             
@@ -279,6 +294,21 @@ const DocenteHistorial = ({ user }) => {
                                                 <p>{item.planMejora}</p>
                                             </div>
                                         )}
+                                        
+                                        {/* Documento adjunto si existe */}
+                                        {item.documentoFilename && (
+                                            <div style={styles.documentBox}>
+                                                <strong>📎 Documento Adjunto:</strong>
+                                                <a 
+                                                    href={getDocumentUrl(item.documentoFilename)} 
+                                                    target="_blank" 
+                                                    rel="noopener noreferrer"
+                                                    style={styles.documentLink}
+                                                >
+                                                    {item.documentoNombre || 'Ver documento'}
+                                                </a>
+                                            </div>
+                                        )}
                                     </div>
                                 ))}
                             </div>
@@ -435,6 +465,21 @@ const styles = {
         backgroundColor: '#fff8e7',
         borderRadius: '8px',
         borderLeft: '3px solid #f39c12'
+    },
+    documentBox: {
+        marginTop: '8px',
+        padding: '10px',
+        backgroundColor: '#e8f0fe',
+        borderRadius: '8px',
+        borderLeft: '3px solid #3498db'
+    },
+    documentLink: {
+        color: '#3498db',
+        textDecoration: 'none',
+        marginLeft: '10px',
+        '&:hover': {
+            textDecoration: 'underline'
+        }
     },
     sinDescripcion: {
         color: '#95a5a6',

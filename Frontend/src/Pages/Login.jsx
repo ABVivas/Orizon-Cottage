@@ -4,32 +4,31 @@ import { useState, useEffect } from 'react';
 const Login = ({ onLogin }) => {
     const [numeroIdentificacion, setNumeroIdentificacion] = useState('');
     const [password, setPassword] = useState('');
+    const [showPassword, setShowPassword] = useState(false);
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);
     const [selectedRole, setSelectedRole] = useState('admin');
     const [serverStatus, setServerStatus] = useState('checking');
 
-    // Verificar conexión con el servidor al cargar
     useEffect(() => {
         checkServerConnection();
     }, []);
 
     const checkServerConnection = async () => {
-    try {
-        // IMPORTANTE: Usar localhost, NO 127.0.0.1
-        const response = await fetch('http://localhost:5000/api/test');
-        if (response.ok) {
-            setServerStatus('online');
-            setError('');
-        } else {
+        try {
+            const response = await fetch('http://localhost:5000/api/test');
+            if (response.ok) {
+                setServerStatus('online');
+                setError('');
+            } else {
+                setServerStatus('offline');
+                setError('Servidor no responde correctamente');
+            }
+        } catch (err) {
             setServerStatus('offline');
-            setError('Servidor no responde correctamente');
+            setError('No se puede conectar con el servidor. Verifique que el backend esté corriendo.');
         }
-    } catch (err) {
-        setServerStatus('offline');
-        setError('No se puede conectar con el servidor. Verifique que el backend esté corriendo.');
-    }
-};
+    };
 
     const handleSubmit = async (e) => {
         e.preventDefault();
@@ -37,17 +36,11 @@ const Login = ({ onLogin }) => {
         setLoading(true);
 
         try {
-        // IMPORTANTE: Usar localhost
-        const response = await fetch('http://localhost:5000/api/auth/login', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                numeroIdentificacion,
-                password
-            })
-        });
+            const response = await fetch('http://localhost:5000/api/auth/login', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ numeroIdentificacion, password })
+            });
 
             const data = await response.json();
 
@@ -75,60 +68,24 @@ const Login = ({ onLogin }) => {
     return (
         <div style={styles.container}>
             <div style={styles.loginCard}>
-                {/* HEADER CON LOGOS RESTAURADOS */}
                 <div style={styles.header}>
-                    {/* Logo Orizon Cottage (izquierda) */}
                     <div style={styles.logoContainer}>
-                        <img 
-                            src="/images/logo-orizon.jpeg" 
-                            alt="Orizon Cottage" 
-                            style={styles.logo}
-                            onError={(e) => {
-                                e.target.onerror = null;
-                                e.target.style.display = 'none';
-                                // Fallback si no hay imagen
-                                const fallback = document.createElement('div');
-                                fallback.innerHTML = '🏫';
-                                fallback.style.fontSize = '40px';
-                                e.target.parentElement.appendChild(fallback);
-                            }}
-                        />
+                        <img src="/images/logo-oorizon.png" alt="Orizon Cottage" style={styles.logo} />
                     </div>
-
-                    {/* Título central */}
                     <div style={styles.titleWrapper}>
                         <h1 style={styles.logoTitle}>ORIZON COTTAGE</h1>
                         <h2 style={styles.subLogo}>GESTIÓN ACADÉMICA</h2>
                         <p style={styles.location}>TIMBÍO CAUCA</p>
                     </div>
-
-                    {/* Logo Institución Educativa La Cabaña (derecha) */}
                     <div style={styles.schoolLogoContainer}>
-                        <img 
-                            src="/images/logo-cabana.png" 
-                            alt="I.E. La Cabaña" 
-                            style={styles.schoolLogo}
-                            onError={(e) => {
-                                e.target.onerror = null;
-                                e.target.style.display = 'none';
-                                // Fallback si no hay imagen
-                                const fallback = document.createElement('div');
-                                fallback.innerHTML = '📚';
-                                fallback.style.fontSize = '40px';
-                                e.target.parentElement.appendChild(fallback);
-                            }}
-                        />
+                        <img src="/images/logo-cabana.png" alt="I.E. La Cabaña" style={styles.schoolLogo} />
                     </div>
                 </div>
 
-                {/* Barra decorativa verde */}
                 <div style={styles.decorativeBar}></div>
-
-                {/* Título del sistema */}
                 <h2 style={styles.systemTitle}>Sistema de Gestión de Convivencia</h2>
                 <p style={styles.subtitle}>Ingrese sus credenciales para acceder al sistema</p>
 
-                {/* Estado del servidor */}
                 {serverStatus === 'offline' && (
                     <div style={styles.serverWarning}>
                         ⚠️ El servidor backend no está disponible. Asegúrese de ejecutar 'npm run dev' en la carpeta Backend.
@@ -138,11 +95,7 @@ const Login = ({ onLogin }) => {
                 <form onSubmit={handleSubmit} style={styles.form}>
                     <div style={styles.inputGroup}>
                         <label style={styles.label}>Tipo de Usuario</label>
-                        <select 
-                            value={selectedRole}
-                            onChange={(e) => setSelectedRole(e.target.value)}
-                            style={styles.select}
-                        >
+                        <select value={selectedRole} onChange={(e) => setSelectedRole(e.target.value)} style={styles.select}>
                             <option value="admin">Administrador</option>
                             <option value="directivo">Directivo</option>
                             <option value="docente">Docente</option>
@@ -151,56 +104,56 @@ const Login = ({ onLogin }) => {
                     </div>
 
                     <div style={styles.inputGroup}>
-                        <label style={styles.label}>Número de Identificación</label>
+                        <label style={styles.label}>Usuario</label>
                         <input
                             type="text"
                             value={numeroIdentificacion}
                             onChange={(e) => setNumeroIdentificacion(e.target.value)}
                             required
                             style={styles.input}
-                            placeholder="Ingrese su número de identificación"
+                            placeholder="Ingrese su usuario"
                         />
                     </div>
 
                     <div style={styles.inputGroup}>
                         <label style={styles.label}>Contraseña</label>
-                        <input
-                            type="password"
-                            value={password}
-                            onChange={(e) => setPassword(e.target.value)}
-                            required
-                            style={styles.input}
-                            placeholder="Ingrese su contraseña"
-                        />
+                        <div style={styles.passwordContainer}>
+                            <input
+                                type={showPassword ? "text" : "password"}
+                                value={password}
+                                onChange={(e) => setPassword(e.target.value)}
+                                required
+                                style={styles.passwordInput}
+                                placeholder="Ingrese su contraseña"
+                            />
+                            <button
+                                type="button"
+                                onClick={() => setShowPassword(!showPassword)}
+                                style={styles.eyeButton}
+                            >
+                                {showPassword ? "👁️" : "👁️‍🗨️"}
+                            </button>
+                        </div>
                     </div>
 
                     {error && (
                         <div style={styles.error}>
                             {error}
                             {serverStatus === 'offline' && (
-                                <button 
-                                    onClick={checkServerConnection}
-                                    style={styles.retryButton}
-                                >
+                                <button onClick={checkServerConnection} style={styles.retryButton}>
                                     Reintentar conexión
                                 </button>
                             )}
                         </div>
                     )}
 
-                    <button 
-                        type="submit" 
-                        style={styles.button}
-                        disabled={loading || serverStatus === 'offline'}
-                    >
+                    <button type="submit" style={styles.button} disabled={loading || serverStatus === 'offline'}>
                         {loading ? 'Iniciando sesión...' : 'Iniciar Sesión'}
                     </button>
                 </form>
 
                 <div style={styles.forgotPassword}>
-                    <p style={styles.forgotText}>
-                        ¿Olvidó su contraseña? Contacte al administrador
-                    </p>
+                    <p style={styles.forgotText}>¿Olvidó su contraseña? Contacte al administrador</p>
                 </div>
             </div>
         </div>
@@ -320,8 +273,7 @@ const styles = {
         borderRadius: '8px',
         fontSize: '15px',
         backgroundColor: 'white',
-        cursor: 'pointer',
-        transition: 'border-color 0.3s, box-shadow 0.3s'
+        cursor: 'pointer'
     },
     input: {
         width: '100%',
@@ -329,8 +281,31 @@ const styles = {
         border: '1px solid #bdc3c7',
         borderRadius: '8px',
         fontSize: '15px',
-        boxSizing: 'border-box',
-        transition: 'border-color 0.3s, box-shadow 0.3s'
+        boxSizing: 'border-box'
+    },
+    passwordContainer: {
+        position: 'relative',
+        width: '100%'
+    },
+    passwordInput: {
+        width: '100%',
+        padding: '12px',
+        paddingRight: '45px',
+        border: '1px solid #bdc3c7',
+        borderRadius: '8px',
+        fontSize: '15px',
+        boxSizing: 'border-box'
+    },
+    eyeButton: {
+        position: 'absolute',
+        right: '12px',
+        top: '50%',
+        transform: 'translateY(-50%)',
+        background: 'none',
+        border: 'none',
+        cursor: 'pointer',
+        fontSize: '18px',
+        padding: '0'
     },
     button: {
         backgroundColor: '#27ae60',
@@ -341,8 +316,7 @@ const styles = {
         fontSize: '16px',
         fontWeight: 'bold',
         cursor: 'pointer',
-        marginTop: '10px',
-        transition: 'background-color 0.3s'
+        marginTop: '10px'
     },
     error: {
         backgroundColor: '#f8d7da',
@@ -385,7 +359,6 @@ const styles = {
     }
 };
 
-// Agregar estilos de focus
 if (typeof document !== 'undefined') {
     const style = document.createElement('style');
     style.textContent = `

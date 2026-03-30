@@ -8,6 +8,9 @@ const DocenteMensajeria = ({ user }) => {
     const [loading, setLoading] = useState(true);
     const [enviando, setEnviando] = useState(false);
     const [errorMsg, setErrorMsg] = useState('');
+    const [currentPage, setCurrentPage] = useState(1);
+    const [currentPageEnviados, setCurrentPageEnviados] = useState(1);
+    const itemsPerPage = 10;
     
     const [nuevoMensaje, setNuevoMensaje] = useState({
         destinatarioId: '',
@@ -22,6 +25,11 @@ const DocenteMensajeria = ({ user }) => {
         if (activeTab === 'nuevo') {
             fetchDestinatarios();
         }
+    }, [activeTab]);
+
+    useEffect(() => {
+        if (activeTab === 'recibidos') setCurrentPage(1);
+        else if (activeTab === 'enviados') setCurrentPageEnviados(1);
     }, [activeTab]);
 
     const fetchMensajes = async () => {
@@ -57,7 +65,7 @@ const DocenteMensajeria = ({ user }) => {
         }
     };
 
-    // ✅ CORREGIDO: Usar el endpoint correcto para docentes
+    // Endpoint corregido para que los docentes puedan enviar a acudientes, directivos Y otros docentes
     const fetchDestinatarios = async () => {
         try {
             setLoading(true);
@@ -72,7 +80,8 @@ const DocenteMensajeria = ({ user }) => {
 
             console.log('🔍 Buscando destinatarios para docente...');
             
-            const response = await fetch('http://localhost:5000/api/users/destinatarios-docente', {
+            // Cambiar el endpoint para obtener acudientes, directivos Y docentes
+            const response = await fetch('http://localhost:5000/api/users/destinatarios', {
                 headers: { 
                     'Authorization': `Bearer ${token}`,
                     'Content-Type': 'application/json'
@@ -89,7 +98,7 @@ const DocenteMensajeria = ({ user }) => {
             setDestinatarios(data.users || []);
             
             if (data.users?.length === 0) {
-                setErrorMsg('No hay acudientes o directivos disponibles para contactar.');
+                setErrorMsg('No hay acudientes, directivos o docentes disponibles para contactar.');
             }
             
         } catch (error) {
@@ -129,6 +138,7 @@ const DocenteMensajeria = ({ user }) => {
                 alert('✅ Mensaje enviado exitosamente');
                 setNuevoMensaje({ destinatarioId: '', asunto: '', contenido: '' });
                 setActiveTab('enviados');
+                fetchMensajes();
             } else {
                 const error = await response.json();
                 alert(`❌ Error: ${error.message || 'No se pudo enviar el mensaje'}`);
@@ -165,6 +175,21 @@ const DocenteMensajeria = ({ user }) => {
         }
     };
 
+    const getRolTexto = (rol) => {
+        switch(rol) {
+            case 'docente': return 'Docente';
+            case 'acudiente': return 'Acudiente';
+            case 'directivo': return 'Directivo';
+            default: return rol;
+        }
+    };
+
+    // Paginación
+    const recibidosPaginados = mensajes.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
+    const totalPagesRecibidos = Math.ceil(mensajes.length / itemsPerPage);
+    const enviadosPaginados = mensajes.slice((currentPageEnviados - 1) * itemsPerPage, currentPageEnviados * itemsPerPage);
+    const totalPagesEnviados = Math.ceil(mensajes.length / itemsPerPage);
+
     if (loading && activeTab !== 'nuevo') {
         return <div style={styles.loading}>Cargando mensajes...</div>;
     }
@@ -172,7 +197,7 @@ const DocenteMensajeria = ({ user }) => {
     return (
         <div style={styles.container}>
             <h2 style={styles.pageTitle}>Mensajería Interna</h2>
-            <p style={styles.pageSubtitle}>Comuníquese con acudientes y directivos</p>
+            <p style={styles.pageSubtitle}>Comuníquese con acudientes, directivos y docentes</p>
 
             {errorMsg && (
                 <div style={styles.errorMsg}>
@@ -206,57 +231,81 @@ const DocenteMensajeria = ({ user }) => {
 
             <div style={styles.contentCard}>
                 {activeTab === 'recibidos' && (
-                    <div style={styles.mensajesList}>
-                        {mensajes.length === 0 ? (
-                            <div style={styles.emptyState}>
-                                <p>📭 No hay mensajes recibidos</p>
-                            </div>
-                        ) : (
-                            mensajes.map((msg) => (
-                                <div 
-                                    key={msg._id} 
-                                    style={{
-                                        ...styles.mensajeItem,
-                                        backgroundColor: msg.leido ? '#f8f9fa' : '#fff3e0'
-                                    }}
-                                    onClick={() => !msg.leido && marcarComoLeido(msg._id)}
-                                >
-                                    <div style={styles.mensajeHeader}>
-                                        <span style={styles.mensajeRemitente}>
-                                            {msg.remitenteId?.nombre || 'Remitente'}
-                                            {!msg.leido && <span style={styles.noLeidoBadge}>Nuevo</span>}
-                                        </span>
-                                        <span style={styles.mensajeHora}>{formatDate(msg.fechaEnvio || msg.createdAt)}</span>
-                                    </div>
-                                    <h4 style={styles.mensajeAsunto}>{msg.asunto}</h4>
-                                    <p style={styles.mensajePreview}>{msg.contenido}</p>
+                    <>
+                        <div style={styles.mensajesList}>
+                            {recibidosPaginados.length === 0 ? (
+                                <div style={styles.emptyState}>
+                                    <p>📭 No hay mensajes recibidos</p>
                                 </div>
-                            ))
+                            ) : (
+                                recibidosPaginados.map((msg) => (
+                                    <div 
+                                        key={msg._id} 
+                                        style={{
+                                            ...styles.mensajeItem,
+                                            backgroundColor: msg.leido ? '#f8f9fa' : '#fff3e0'
+                                        }}
+                                        onClick={() => !msg.leido && marcarComoLeido(msg._id)}
+                                    >
+                                        <div style={styles.mensajeHeader}>
+                                            <span style={styles.mensajeRemitente}>
+                                                {msg.remitenteId?.nombre || 'Remitente'}
+                                                <span style={styles.mensajeRol}>
+                                                    {getRolTexto(msg.remitenteId?.rol)}
+                                                </span>
+                                                {!msg.leido && <span style={styles.noLeidoBadge}>Nuevo</span>}
+                                            </span>
+                                            <span style={styles.mensajeHora}>{formatDate(msg.fechaEnvio || msg.createdAt)}</span>
+                                        </div>
+                                        <h4 style={styles.mensajeAsunto}>{msg.asunto}</h4>
+                                        <p style={styles.mensajePreview}>{msg.contenido}</p>
+                                    </div>
+                                ))
+                            )}
+                        </div>
+                        {totalPagesRecibidos > 1 && (
+                            <div style={styles.pagination}>
+                                <button onClick={() => setCurrentPage(p => Math.max(1, p-1))} disabled={currentPage === 1} style={styles.pageButton}>Anterior</button>
+                                <span style={styles.pageInfo}>Página {currentPage} de {totalPagesRecibidos}</span>
+                                <button onClick={() => setCurrentPage(p => Math.min(totalPagesRecibidos, p+1))} disabled={currentPage === totalPagesRecibidos} style={styles.pageButton}>Siguiente</button>
+                            </div>
                         )}
-                    </div>
+                    </>
                 )}
 
                 {activeTab === 'enviados' && (
-                    <div style={styles.mensajesList}>
-                        {mensajes.length === 0 ? (
-                            <div style={styles.emptyState}>
-                                <p>📤 No hay mensajes enviados</p>
-                            </div>
-                        ) : (
-                            mensajes.map((msg) => (
-                                <div key={msg._id} style={styles.mensajeItem}>
-                                    <div style={styles.mensajeHeader}>
-                                        <span style={styles.mensajeRemitente}>
-                                            Para: {msg.destinatarioId?.nombre || 'Destinatario'}
-                                        </span>
-                                        <span style={styles.mensajeHora}>{formatDate(msg.fechaEnvio || msg.createdAt)}</span>
-                                    </div>
-                                    <h4 style={styles.mensajeAsunto}>{msg.asunto}</h4>
-                                    <p style={styles.mensajePreview}>{msg.contenido}</p>
+                    <>
+                        <div style={styles.mensajesList}>
+                            {enviadosPaginados.length === 0 ? (
+                                <div style={styles.emptyState}>
+                                    <p>📤 No hay mensajes enviados</p>
                                 </div>
-                            ))
+                            ) : (
+                                enviadosPaginados.map((msg) => (
+                                    <div key={msg._id} style={styles.mensajeItem}>
+                                        <div style={styles.mensajeHeader}>
+                                            <span style={styles.mensajeRemitente}>
+                                                Para: {msg.destinatarioId?.nombre || 'Destinatario'}
+                                                <span style={styles.mensajeRol}>
+                                                    {getRolTexto(msg.destinatarioId?.rol)}
+                                                </span>
+                                            </span>
+                                            <span style={styles.mensajeHora}>{formatDate(msg.fechaEnvio || msg.createdAt)}</span>
+                                        </div>
+                                        <h4 style={styles.mensajeAsunto}>{msg.asunto}</h4>
+                                        <p style={styles.mensajePreview}>{msg.contenido}</p>
+                                    </div>
+                                ))
+                            )}
+                        </div>
+                        {totalPagesEnviados > 1 && (
+                            <div style={styles.pagination}>
+                                <button onClick={() => setCurrentPageEnviados(p => Math.max(1, p-1))} disabled={currentPageEnviados === 1} style={styles.pageButton}>Anterior</button>
+                                <span style={styles.pageInfo}>Página {currentPageEnviados} de {totalPagesEnviados}</span>
+                                <button onClick={() => setCurrentPageEnviados(p => Math.min(totalPagesEnviados, p+1))} disabled={currentPageEnviados === totalPagesEnviados} style={styles.pageButton}>Siguiente</button>
+                            </div>
                         )}
-                    </div>
+                    </>
                 )}
 
                 {activeTab === 'nuevo' && (
@@ -272,7 +321,7 @@ const DocenteMensajeria = ({ user }) => {
                                 <option value="">Seleccione un destinatario</option>
                                 {destinatarios.map(d => (
                                     <option key={d._id} value={d._id}>
-                                        {d.nombre} ({d.rol === 'acudiente' ? 'Acudiente' : 'Directivo'})
+                                        {d.nombre} ({d.rol === 'acudiente' ? 'Acudiente' : d.rol === 'directivo' ? 'Directivo' : 'Docente'})
                                     </option>
                                 ))}
                             </select>
@@ -399,7 +448,15 @@ const styles = {
         color: '#2d3748',
         display: 'flex',
         alignItems: 'center',
-        gap: '8px'
+        gap: '8px',
+        flexWrap: 'wrap'
+    },
+    mensajeRol: {
+        fontSize: '11px',
+        color: '#7f8c8d',
+        backgroundColor: '#ecf0f1',
+        padding: '2px 8px',
+        borderRadius: '12px'
     },
     noLeidoBadge: {
         fontSize: '10px',
@@ -489,6 +546,26 @@ const styles = {
         ':hover': {
             backgroundColor: '#219a52'
         }
+    },
+    pagination: {
+        display: 'flex',
+        justifyContent: 'center',
+        alignItems: 'center',
+        gap: '20px',
+        marginTop: '20px'
+    },
+    pageButton: {
+        padding: '6px 12px',
+        backgroundColor: '#27ae60',
+        color: 'white',
+        border: 'none',
+        borderRadius: '4px',
+        cursor: 'pointer',
+        fontSize: '12px'
+    },
+    pageInfo: {
+        fontSize: '12px',
+        color: '#2c3e50'
     }
 };
 

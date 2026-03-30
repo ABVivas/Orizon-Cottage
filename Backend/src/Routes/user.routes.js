@@ -1,18 +1,17 @@
 // Backend/src/Routes/user.routes.js
-// Backend/src/Routes/user.routes.js
 import express from 'express';
 import User from '../Data/user.model.js';
 import Student from '../Data/student.model.js';
-import { verifyToken, isDirectivo } from '../Middleware/auth.middleware.js';
+import { verifyToken, isDirectivoOrAdmin, isDirectivo, isAdmin } from '../Middleware/auth.middleware.js';
 import bcrypt from 'bcryptjs';
 import mongoose from 'mongoose';
 
 const router = express.Router();
 
 // ===========================================
-// OBTENER TODOS LOS USUARIOS (solo admin/directivo)
+// OBTENER TODOS LOS USUARIOS (admin o directivo)
 // ===========================================
-router.get('/', verifyToken, isDirectivo, async (req, res) => {
+router.get('/', verifyToken, isDirectivoOrAdmin, async (req, res) => {
     try {
         const users = await User.find().select('-password');
         res.json({
@@ -28,7 +27,7 @@ router.get('/', verifyToken, isDirectivo, async (req, res) => {
 });
 
 // ===========================================
-// OBTENER ESTADÍSTICAS PARA ADMIN
+// OBTENER ESTADÍSTICAS PARA ADMIN (solo admin)
 // ===========================================
 router.get('/stats', verifyToken, async (req, res) => {
     try {
@@ -69,20 +68,30 @@ router.get('/stats', verifyToken, async (req, res) => {
 });
 
 // ===========================================
-// OBTENER DESTINATARIOS PARA MENSAJERÍA (directivo puede ver todos)
+// OBTENER DESTINATARIOS PARA MENSAJERÍA (ACTUALIZADO PARA DOCENTES)
 // ===========================================
 router.get('/destinatarios', verifyToken, async (req, res) => {
     try {
-        let rolFilter = ['docente', 'directivo'];
+        let rolFilter = [];
         
-        // Si el usuario es directivo o admin, también puede enviar a acudientes
-        if (req.user.rol === 'directivo' || req.user.rol === 'admin') {
+        // Dependiendo del rol del usuario, mostrar diferentes destinatarios
+        if (req.user.rol === 'admin' || req.user.rol === 'directivo') {
+            // Admin y directivo pueden enviar a docentes, directivos y acudientes
             rolFilter = ['docente', 'directivo', 'acudiente'];
+        } else if (req.user.rol === 'docente') {
+            // Docente puede enviar a acudientes, directivos y otros docentes
+            rolFilter = ['acudiente', 'directivo', 'docente'];
+        } else if (req.user.rol === 'acudiente') {
+            // Acudiente solo puede enviar a docentes y directivos
+            rolFilter = ['docente', 'directivo'];
+        } else {
+            rolFilter = ['docente', 'directivo'];
         }
         
         const users = await User.find({
             rol: { $in: rolFilter },
-            activo: true
+            activo: true,
+            _id: { $ne: req.user.id } // Excluir al propio usuario
         }).select('nombre rol _id');
         
         console.log(`📨 Enviando ${users.length} destinatarios disponibles para ${req.user.rol}`);
@@ -101,7 +110,7 @@ router.get('/destinatarios', verifyToken, async (req, res) => {
 });
 
 // ===========================================
-// OBTENER DESTINATARIOS PARA DOCENTES
+// OBTENER DESTINATARIOS PARA DOCENTES (legado - se mantiene por compatibilidad)
 // ===========================================
 router.get('/destinatarios-docente', verifyToken, async (req, res) => {
     try {
@@ -110,7 +119,7 @@ router.get('/destinatarios-docente', verifyToken, async (req, res) => {
             activo: true
         }).select('nombre rol _id');
         
-        console.log(`📨 Enviando ${users.length} destinatarios para docente`);
+        console.log(`📨 Enviando ${users.length} destinatarios para docente (legado)`);
         
         res.json({
             success: true,
@@ -126,9 +135,9 @@ router.get('/destinatarios-docente', verifyToken, async (req, res) => {
 });
 
 // ===========================================
-// OBTENER USUARIOS POR ROL (solo admin/directivo)
+// OBTENER USUARIOS POR ROL (admin o directivo)
 // ===========================================
-router.get('/rol/:rol', verifyToken, isDirectivo, async (req, res) => {
+router.get('/rol/:rol', verifyToken, isDirectivoOrAdmin, async (req, res) => {
     try {
         const { rol } = req.params;
         const users = await User.find({ rol }).select('-password');
@@ -205,9 +214,9 @@ router.put('/profile', verifyToken, async (req, res) => {
 });
 
 // ===========================================
-// ACTUALIZAR USUARIO POR ID (admin/directivo)
+// ACTUALIZAR USUARIO POR ID (admin o directivo)
 // ===========================================
-router.put('/:id', verifyToken, isDirectivo, async (req, res) => {
+router.put('/:id', verifyToken, isDirectivoOrAdmin, async (req, res) => {
     try {
         const { id } = req.params;
         const { nombre, email, telefono, activo, cursosAsignados, rol } = req.body;
@@ -260,9 +269,9 @@ router.put('/:id', verifyToken, isDirectivo, async (req, res) => {
 });
 
 // ===========================================
-// CAMBIAR ESTADO DE USUARIO
+// CAMBIAR ESTADO DE USUARIO (admin o directivo)
 // ===========================================
-router.put('/:id/toggle-status', verifyToken, isDirectivo, async (req, res) => {
+router.put('/:id/toggle-status', verifyToken, isDirectivoOrAdmin, async (req, res) => {
     try {
         const { activo } = req.body;
         const user = await User.findByIdAndUpdate(
@@ -284,9 +293,9 @@ router.put('/:id/toggle-status', verifyToken, isDirectivo, async (req, res) => {
 });
 
 // ===========================================
-// RESETEAR CONTRASEÑA
+// RESETEAR CONTRASEÑA (admin o directivo)
 // ===========================================
-router.post('/:id/reset-password', verifyToken, isDirectivo, async (req, res) => {
+router.post('/:id/reset-password', verifyToken, isDirectivoOrAdmin, async (req, res) => {
     try {
         const user = await User.findById(req.params.id);
         if (!user) {

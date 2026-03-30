@@ -24,10 +24,32 @@ const AdminUserManagement = () => {
     
     // Estados para modales
     const [showModal, setShowModal] = useState(false);
-    const [modalType, setModalType] = useState(''); // 'student', 'teacher', 'user'
+    const [modalType, setModalType] = useState(''); // 'student', 'teacher', 'user', 'newPerson'
     const [selectedItem, setSelectedItem] = useState(null);
     const [editForm, setEditForm] = useState({});
     const [saving, setSaving] = useState(false);
+    
+    // Estado para nuevo usuario/estudiante (unificado)
+    const [newPersonForm, setNewPersonForm] = useState({
+        tipo: 'acudiente', // 'acudiente', 'docente', 'directivo', 'estudiante'
+        numeroIdentificacion: '',
+        nombre: '',
+        telefono: '',
+        password: '',
+        cursosAsignados: '',
+        // Para estudiantes
+        id_estudiante: '',
+        grado_especifico: '0°',
+        nombre_acudiente: '',
+        cedula_padre: '',
+        vereda: 'LA CABAÑA',
+        parentesco: 'PADRE'
+    });
+    
+    // Lista de estudiantes disponibles para asociar a acudientes
+    const [availableStudents, setAvailableStudents] = useState([]);
+    const [selectedStudentsForAcudiente, setSelectedStudentsForAcudiente] = useState([]);
+    const [showNewPersonModal, setShowNewPersonModal] = useState(false);
     
     const [stats, setStats] = useState({ 
         totalUsers: 0, 
@@ -67,6 +89,7 @@ const AdminUserManagement = () => {
 
     useEffect(() => {
         fetchAllData();
+        fetchAvailableStudents();
     }, []);
 
     useEffect(() => {
@@ -108,6 +131,21 @@ const AdminUserManagement = () => {
             setError(error.message);
         } finally {
             setLoading(false);
+        }
+    };
+
+    const fetchAvailableStudents = async () => {
+        try {
+            const token = localStorage.getItem('token');
+            const response = await fetch('http://localhost:5000/api/students', {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            const data = await response.json();
+            if (data.success) {
+                setAvailableStudents(data.data || []);
+            }
+        } catch (error) {
+            console.error('Error fetching students:', error);
         }
     };
 
@@ -204,7 +242,128 @@ const AdminUserManagement = () => {
     
     const totalPages = (data) => Math.ceil(data.length / itemsPerPage);
     
+    // Función para manejar selección de estudiantes para acudiente
+    const toggleStudentSelection = (studentId) => {
+        setSelectedStudentsForAcudiente(prev => {
+            if (prev.includes(studentId)) {
+                return prev.filter(id => id !== studentId);
+            } else {
+                return [...prev, studentId];
+            }
+        });
+    };
+    
     // ========== FUNCIONES DE EDICIÓN ==========
+    
+    const openNewPersonModal = () => {
+        setNewPersonForm({
+            tipo: 'acudiente',
+            numeroIdentificacion: '',
+            nombre: '',
+            telefono: '',
+            password: '',
+            cursosAsignados: '',
+            id_estudiante: '',
+            grado_especifico: '0°',
+            nombre_acudiente: '',
+            cedula_padre: '',
+            vereda: 'LA CABAÑA',
+            parentesco: 'PADRE'
+        });
+        setSelectedStudentsForAcudiente([]);
+        setShowNewPersonModal(true);
+    };
+    
+    const handleCreatePerson = async () => {
+        if (!newPersonForm.nombre) {
+            alert('❌ El nombre es obligatorio');
+            return;
+        }
+        
+        setSaving(true);
+        try {
+            const token = localStorage.getItem('token');
+            
+            if (newPersonForm.tipo === 'estudiante') {
+                if (!newPersonForm.id_estudiante) {
+                    alert('❌ El ID del estudiante es obligatorio');
+                    setSaving(false);
+                    return;
+                }
+                
+                const studentData = {
+                    id_estudiante: newPersonForm.id_estudiante,
+                    apellido1: newPersonForm.nombre,
+                    grado_especifico: newPersonForm.grado_especifico,
+                    nombre_acudiente: newPersonForm.nombre_acudiente,
+                    cedula_padre: newPersonForm.cedula_padre,
+                    telefono: newPersonForm.telefono,
+                    vereda: newPersonForm.vereda,
+                    parentesco: newPersonForm.parentesco,
+                    grado: newPersonForm.grado_especifico === '0°' ? 'preescolar' : 
+                            ['1°','2°','3°','4°','5°'].includes(newPersonForm.grado_especifico) ? 'primaria' : 'secundaria'
+                };
+                
+                const response = await fetch('http://localhost:5000/api/students', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`
+                    },
+                    body: JSON.stringify(studentData)
+                });
+                
+                const data = await response.json();
+                if (data.success) {
+                    alert(`✅ Estudiante creado exitosamente\n\nID: ${newPersonForm.id_estudiante}\nNombre: ${newPersonForm.nombre}`);
+                    setShowNewPersonModal(false);
+                    fetchAllData();
+                    fetchAvailableStudents();
+                } else {
+                    alert('❌ Error: ' + (data.message || 'No se pudo crear el estudiante'));
+                }
+            } else {
+                if (!newPersonForm.numeroIdentificacion) {
+                    alert('❌ El número de identificación es obligatorio');
+                    setSaving(false);
+                    return;
+                }
+                
+                const userData = {
+                    numeroIdentificacion: newPersonForm.numeroIdentificacion,
+                    nombre: newPersonForm.nombre,
+                    telefono: newPersonForm.telefono || '',
+                    rol: newPersonForm.tipo,
+                    password: newPersonForm.password || '123456',
+                    cursosAsignados: newPersonForm.cursosAsignados ? newPersonForm.cursosAsignados.split(',').map(c => c.trim()) : [],
+                    estudiantesAsociados: selectedStudentsForAcudiente
+                };
+                
+                const response = await fetch('http://localhost:5000/api/auth/register', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`
+                    },
+                    body: JSON.stringify(userData)
+                });
+                
+                const data = await response.json();
+                if (data.success) {
+                    alert(`✅ ${newPersonForm.tipo === 'docente' ? 'Docente' : newPersonForm.tipo === 'directivo' ? 'Directivo' : 'Acudiente'} creado exitosamente\n\nUsuario: ${newPersonForm.numeroIdentificacion}\nContraseña: ${newPersonForm.password || '123456'}`);
+                    setShowNewPersonModal(false);
+                    fetchAllData();
+                } else {
+                    alert('❌ Error: ' + (data.message || 'No se pudo crear el usuario'));
+                }
+            }
+        } catch (error) {
+            console.error('Error:', error);
+            alert('❌ Error de conexión: ' + error.message);
+        } finally {
+            setSaving(false);
+        }
+    };
     
     const openEditStudent = (student) => {
         setModalType('student');
@@ -226,7 +385,6 @@ const AdminUserManagement = () => {
     const openEditTeacher = (teacher) => {
         setModalType('teacher');
         setSelectedItem(teacher);
-        // Buscar el usuario docente correspondiente
         const teacherUser = users.find(u => u.nombre === teacher.docente && u.rol === 'docente');
         setEditForm({
             nombre: teacher.docente || '',
@@ -257,10 +415,6 @@ const AdminUserManagement = () => {
             const token = localStorage.getItem('token');
             
             if (modalType === 'student') {
-                // Actualizar estudiante
-                console.log('📝 Actualizando estudiante ID:', selectedItem._id);
-                console.log('📝 Datos a enviar:', editForm);
-                
                 const response = await fetch(`http://localhost:5000/api/students/${selectedItem._id}`, {
                     method: 'PUT',
                     headers: {
@@ -270,17 +424,7 @@ const AdminUserManagement = () => {
                     body: JSON.stringify(editForm)
                 });
                 
-                console.log('📡 Respuesta status:', response.status);
-                
-                if (!response.ok) {
-                    const errorText = await response.text();
-                    console.error('Error response:', errorText);
-                    throw new Error(`HTTP ${response.status}: ${errorText}`);
-                }
-                
                 const data = await response.json();
-                console.log('📡 Respuesta data:', data);
-                
                 if (data.success) {
                     alert('✅ Estudiante actualizado correctamente');
                     await fetchAllData();
@@ -290,11 +434,8 @@ const AdminUserManagement = () => {
                 }
             } 
             else if (modalType === 'teacher') {
-                // Buscar el usuario docente
                 const teacherUser = users.find(u => u.nombre === selectedItem.docente && u.rol === 'docente');
                 if (teacherUser) {
-                    console.log('📝 Actualizando docente ID:', teacherUser._id);
-                    
                     const response = await fetch(`http://localhost:5000/api/users/${teacherUser._id}`, {
                         method: 'PUT',
                         headers: {
@@ -322,9 +463,6 @@ const AdminUserManagement = () => {
                 }
             } 
             else if (modalType === 'user') {
-                // Actualizar usuario (acudiente, directivo, admin)
-                console.log('📝 Actualizando usuario ID:', selectedItem._id);
-                
                 const response = await fetch(`http://localhost:5000/api/users/${selectedItem._id}`, {
                     method: 'PUT',
                     headers: {
@@ -408,7 +546,6 @@ const AdminUserManagement = () => {
     
     const gradosNumericos = ['todos', '0°', '1°', '2°', '3°', '4°', '5°', '6°', '7°', '8°', '9°', '10°', '11°'];
     const asignaturas = ['todos', ...new Set(teachers.map(t => t.asignatura).filter(Boolean))];
-    
     const parentescoOptions = ['PADRE', 'MADRE', 'ABUELO', 'TIO', 'OTRO'];
 
     if (loading) {
@@ -430,8 +567,13 @@ const AdminUserManagement = () => {
     return (
         <div style={styles.container}>
             <div style={styles.header}>
-                <h2 style={styles.title}>Gestión de Usuarios</h2>
-                <p style={styles.subtitle}>Administre usuarios, docentes y estudiantes del sistema</p>
+                <div>
+                    <h2 style={styles.title}>Gestión de Usuarios</h2>
+                    <p style={styles.subtitle}>Administre usuarios, docentes y estudiantes del sistema</p>
+                </div>
+                <button style={styles.addButton} onClick={openNewPersonModal}>
+                    + Agregar Persona
+                </button>
             </div>
             
             {/* Stats Grid */}
@@ -569,7 +711,7 @@ const AdminUserManagement = () => {
                                         <td style={styles.td}>
                                             <strong>{u.nombre}</strong>
                                             <br /><small style={styles.emailText}>{u.email || ''}</small>
-                                        </td>
+                                         </td>
                                         <td style={styles.td}>{u.numeroIdentificacion}</td>
                                         <td style={styles.td}>
                                             <span style={{
@@ -578,19 +720,19 @@ const AdminUserManagement = () => {
                                             }}>
                                                 {u.rol === 'admin' ? 'Admin' : u.rol === 'directivo' ? 'Directivo' : u.rol === 'docente' ? 'Docente' : 'Acudiente'}
                                             </span>
-                                        </td>
+                                         </td>
                                         <td style={styles.td}>
                                             <span style={{...styles.statusBadge, backgroundColor: u.activo ? '#27ae60' : '#e74c3c'}}>
                                                 {u.activo ? 'Activo' : 'Inactivo'}
                                             </span>
-                                        </td>
+                                         </td>
                                         <td style={styles.td}>
                                             <button style={styles.actionButton} onClick={() => openEditUser(u)} title="Editar">✏️</button>
                                             <button style={styles.actionButton} onClick={() => toggleUserStatus(u._id, u.activo)} title={u.activo ? 'Desactivar' : 'Activar'}>
                                                 {u.activo ? '🔒' : '🔓'}
                                             </button>
                                             <button style={styles.actionButton} onClick={() => resetUserPassword(u._id, u.nombre)} title="Resetear contraseña">🔑</button>
-                                        </td>
+                                         </td>
                                     </tr>
                                 ))}
                             </tbody>
@@ -822,15 +964,217 @@ const AdminUserManagement = () => {
                     </div>
                 </div>
             )}
+            
+            {/* Modal para agregar nueva persona */}
+            {showNewPersonModal && (
+                <div style={styles.modalOverlay} onClick={() => setShowNewPersonModal(false)}>
+                    <div style={{...styles.modal, maxWidth: '650px'}} onClick={(e) => e.stopPropagation()}>
+                        <div style={styles.modalHeader}>
+                            <h3 style={styles.modalTitle}>Agregar Persona</h3>
+                            <button style={styles.modalClose} onClick={() => setShowNewPersonModal(false)}>×</button>
+                        </div>
+                        
+                        <div style={styles.modalContent}>
+                            <div style={styles.formGroup}>
+                                <label style={styles.modalLabel}>Tipo de Persona *</label>
+                                <select
+                                    value={newPersonForm.tipo}
+                                    onChange={(e) => {
+                                        setNewPersonForm({...newPersonForm, tipo: e.target.value});
+                                        setSelectedStudentsForAcudiente([]);
+                                    }}
+                                    style={styles.select}
+                                >
+                                    <option value="acudiente">Acudiente</option>
+                                    <option value="docente">Docente</option>
+                                    <option value="directivo">Directivo</option>
+                                    <option value="estudiante">Estudiante</option>
+                                </select>
+                            </div>
+                            
+                            {newPersonForm.tipo !== 'estudiante' && (
+                                <div style={styles.formGroup}>
+                                    <label style={styles.modalLabel}>Número de Identificación *</label>
+                                    <input
+                                        type="text"
+                                        value={newPersonForm.numeroIdentificacion}
+                                        onChange={(e) => setNewPersonForm({...newPersonForm, numeroIdentificacion: e.target.value})}
+                                        style={styles.input}
+                                        placeholder="Ej: 123456789"
+                                    />
+                                </div>
+                            )}
+                            
+                            {newPersonForm.tipo === 'estudiante' && (
+                                <div style={styles.formGroup}>
+                                    <label style={styles.modalLabel}>ID Estudiante *</label>
+                                    <input
+                                        type="text"
+                                        value={newPersonForm.id_estudiante}
+                                        onChange={(e) => setNewPersonForm({...newPersonForm, id_estudiante: e.target.value})}
+                                        style={styles.input}
+                                        placeholder="Ej: 1063819482"
+                                    />
+                                </div>
+                            )}
+                            
+                            <div style={styles.formGroup}>
+                                <label style={styles.modalLabel}>Nombre Completo *</label>
+                                <input
+                                    type="text"
+                                    value={newPersonForm.nombre}
+                                    onChange={(e) => setNewPersonForm({...newPersonForm, nombre: e.target.value})}
+                                    style={styles.input}
+                                    placeholder="Ej: Juan Pérez"
+                                />
+                            </div>
+                            
+                            {newPersonForm.tipo === 'docente' && (
+                                <div style={styles.formGroup}>
+                                    <label style={styles.modalLabel}>Cursos Asignados (separados por coma)</label>
+                                    <input
+                                        type="text"
+                                        value={newPersonForm.cursosAsignados}
+                                        onChange={(e) => setNewPersonForm({...newPersonForm, cursosAsignados: e.target.value})}
+                                        style={styles.input}
+                                        placeholder="Ej: 6°, 7°, 8°"
+                                    />
+                                    <small style={styles.helpText}>Separe los cursos con comas</small>
+                                </div>
+                            )}
+                            
+                            {newPersonForm.tipo === 'acudiente' && (
+                                <div style={styles.formGroup}>
+                                    <label style={styles.modalLabel}>Estudiantes Asociados</label>
+                                    <div style={styles.studentsListContainer}>
+                                        {availableStudents.length === 0 ? (
+                                            <p style={styles.noStudentsText}>No hay estudiantes disponibles. Primero agregue estudiantes.</p>
+                                        ) : (
+                                            availableStudents.map(student => (
+                                                <label key={student._id} style={styles.checkboxLabel}>
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={selectedStudentsForAcudiente.includes(student._id)}
+                                                        onChange={() => toggleStudentSelection(student._id)}
+                                                    />
+                                                    {student.apellido1 || student.apellido} - {student.grado_especifico} ({student.id_estudiante})
+                                                </label>
+                                            ))
+                                        )}
+                                    </div>
+                                    <small style={styles.helpText}>Seleccione los estudiantes asociados a este acudiente</small>
+                                </div>
+                            )}
+                            
+                            {newPersonForm.tipo === 'estudiante' && (
+                                <>
+                                    <div style={styles.formGroup}>
+                                        <label style={styles.modalLabel}>Grado *</label>
+                                        <select
+                                            value={newPersonForm.grado_especifico}
+                                            onChange={(e) => setNewPersonForm({...newPersonForm, grado_especifico: e.target.value})}
+                                            style={styles.select}
+                                        >
+                                            {gradosNumericos.filter(g => g !== 'todos').map(g => (
+                                                <option key={g} value={g}>{g}</option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                    
+                                    <div style={styles.formGroup}>
+                                        <label style={styles.modalLabel}>Nombre Acudiente</label>
+                                        <input
+                                            type="text"
+                                            value={newPersonForm.nombre_acudiente}
+                                            onChange={(e) => setNewPersonForm({...newPersonForm, nombre_acudiente: e.target.value})}
+                                            style={styles.input}
+                                            placeholder="Nombre del acudiente"
+                                        />
+                                    </div>
+                                    
+                                    <div style={styles.formGroup}>
+                                        <label style={styles.modalLabel}>Cédula Acudiente</label>
+                                        <input
+                                            type="text"
+                                            value={newPersonForm.cedula_padre}
+                                            onChange={(e) => setNewPersonForm({...newPersonForm, cedula_padre: e.target.value})}
+                                            style={styles.input}
+                                            placeholder="Cédula del acudiente"
+                                        />
+                                    </div>
+                                    
+                                    <div style={styles.formGroup}>
+                                        <label style={styles.modalLabel}>Parentesco</label>
+                                        <select
+                                            value={newPersonForm.parentesco}
+                                            onChange={(e) => setNewPersonForm({...newPersonForm, parentesco: e.target.value})}
+                                            style={styles.select}
+                                        >
+                                            {parentescoOptions.map(p => (
+                                                <option key={p} value={p}>{p}</option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                    
+                                    <div style={styles.formGroup}>
+                                        <label style={styles.modalLabel}>Vereda</label>
+                                        <input
+                                            type="text"
+                                            value={newPersonForm.vereda}
+                                            onChange={(e) => setNewPersonForm({...newPersonForm, vereda: e.target.value})}
+                                            style={styles.input}
+                                            placeholder="Ej: LA CABAÑA"
+                                        />
+                                    </div>
+                                </>
+                            )}
+                            
+                            <div style={styles.formGroup}>
+                                <label style={styles.modalLabel}>Teléfono (opcional)</label>
+                                <input
+                                    type="text"
+                                    value={newPersonForm.telefono}
+                                    onChange={(e) => setNewPersonForm({...newPersonForm, telefono: e.target.value})}
+                                    style={styles.input}
+                                    placeholder="Ej: 3001234567"
+                                />
+                            </div>
+                            
+                            {newPersonForm.tipo !== 'estudiante' && (
+                                <div style={styles.formGroup}>
+                                    <label style={styles.modalLabel}>Contraseña (dejar vacío para usar 123456)</label>
+                                    <input
+                                        type="text"
+                                        value={newPersonForm.password}
+                                        onChange={(e) => setNewPersonForm({...newPersonForm, password: e.target.value})}
+                                        style={styles.input}
+                                        placeholder="Contraseña temporal"
+                                    />
+                                </div>
+                            )}
+                        </div>
+                        
+                        <div style={styles.modalFooter}>
+                            <button style={styles.cancelButton} onClick={() => setShowNewPersonModal(false)}>
+                                Cancelar
+                            </button>
+                            <button style={styles.saveButton} onClick={handleCreatePerson} disabled={saving}>
+                                {saving ? 'Creando...' : 'Crear Persona'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };
 
 const styles = {
     container: { padding: '20px', maxWidth: '1400px', margin: '0 auto' },
-    header: { marginBottom: '30px' },
+    header: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '30px', flexWrap: 'wrap', gap: '16px' },
     title: { margin: '0 0 5px 0', color: '#2c3e50', fontSize: '24px', fontWeight: '600' },
     subtitle: { margin: 0, color: '#7f8c8d', fontSize: '14px' },
+    addButton: { padding: '10px 20px', backgroundColor: '#27ae60', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '14px', fontWeight: '500' },
     error: { padding: '20px', backgroundColor: '#f8d7da', color: '#721c24', borderRadius: '5px', textAlign: 'center' },
     retryButton: { padding: '10px 20px', backgroundColor: '#27ae60', color: 'white', border: 'none', borderRadius: '5px', cursor: 'pointer', marginTop: '10px' },
     statsGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '15px', marginBottom: '30px' },
@@ -867,8 +1211,13 @@ const styles = {
     modalContent: { padding: '20px', overflowY: 'auto' },
     modalFooter: { padding: '16px 20px', borderTop: '1px solid #ecf0f1', display: 'flex', justifyContent: 'flex-end', gap: '10px' },
     formGroup: { marginBottom: '15px' },
-    input: { width: '100%', padding: '10px', border: '1px solid #bdc3c7', borderRadius: '5px', fontSize: '14px', boxSizing: 'border-box' },
-    select: { width: '100%', padding: '10px', border: '1px solid #bdc3c7', borderRadius: '5px', fontSize: '14px', backgroundColor: 'white' },
+    modalLabel: { display: 'block', marginBottom: '5px', fontWeight: '600', color: '#2c3e50', fontSize: '13px' },
+    input: { width: '100%', padding: '10px', border: '1px solid #dcdfe6', borderRadius: '6px', fontSize: '14px', boxSizing: 'border-box' },
+    select: { width: '100%', padding: '10px', border: '1px solid #dcdfe6', borderRadius: '6px', fontSize: '14px', backgroundColor: 'white' },
+    studentsListContainer: { border: '1px solid #dcdfe6', borderRadius: '6px', padding: '10px', maxHeight: '200px', overflowY: 'auto', backgroundColor: '#fafafa' },
+    checkboxLabel: { display: 'flex', alignItems: 'center', gap: '8px', padding: '6px 0', cursor: 'pointer', fontSize: '13px' },
+    noStudentsText: { textAlign: 'center', color: '#95a5a6', padding: '20px', fontSize: '13px' },
+    helpText: { fontSize: '11px', color: '#7f8c8d', marginTop: '4px', display: 'block' },
     cancelButton: { padding: '8px 16px', backgroundColor: '#95a5a6', color: 'white', border: 'none', borderRadius: '5px', cursor: 'pointer' },
     saveButton: { padding: '8px 16px', backgroundColor: '#27ae60', color: 'white', border: 'none', borderRadius: '5px', cursor: 'pointer' }
 };

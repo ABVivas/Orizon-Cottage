@@ -15,8 +15,35 @@ const AdminReports = () => {
     const [showPreview, setShowPreview] = useState(false);
     const [loading, setLoading] = useState(false);
     const [recentReports, setRecentReports] = useState([]);
+    const [usersMap, setUsersMap] = useState({}); // Mapa de usuarios por ID
 
     const availableCourses = ['0°', '1°', '2°', '3°', '4°', '5°', '6°', '7°', '8°', '9°', '10°', '11°'];
+
+    // Cargar usuarios para obtener nombres de registradores
+    useEffect(() => {
+        const fetchUsers = async () => {
+            try {
+                const token = localStorage.getItem('token');
+                const response = await fetch('http://localhost:5000/api/users', {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                const data = await response.json();
+                if (data.success) {
+                    const map = {};
+                    data.users.forEach(user => {
+                        map[user._id] = user.nombre;
+                        if (user.numeroIdentificacion) {
+                            map[user.numeroIdentificacion] = user.nombre;
+                        }
+                    });
+                    setUsersMap(map);
+                }
+            } catch (error) {
+                console.error('Error fetching users:', error);
+            }
+        };
+        fetchUsers();
+    }, []);
 
     useEffect(() => {
         const savedReports = localStorage.getItem('recentReports');
@@ -61,7 +88,6 @@ const AdminReports = () => {
         try {
             const token = localStorage.getItem('token');
             
-            // Usar el nuevo endpoint con rango de fechas
             const attendanceRes = await fetch(
                 `http://localhost:5000/api/attendance/report-range?startDate=${startDate}&endDate=${endDate}`,
                 {
@@ -72,9 +98,6 @@ const AdminReports = () => {
             
             if (attendanceData.success) {
                 console.log('📊 Asistencias recibidas:', attendanceData.attendance?.length || 0);
-                if (attendanceData.attendance?.length > 0) {
-                    console.log('📝 Ejemplo de asistencia:', attendanceData.attendance[0]);
-                }
                 return attendanceData.attendance || [];
             }
             return [];
@@ -88,7 +111,6 @@ const AdminReports = () => {
         try {
             const token = localStorage.getItem('token');
             
-            // Obtener observaciones con rango de fechas
             const observationsRes = await fetch(
                 `http://localhost:5000/api/observations?startDate=${startDate}&endDate=${endDate}&limit=1000`,
                 {
@@ -111,7 +133,6 @@ const AdminReports = () => {
     const fetchAllData = async () => {
         setLoading(true);
         try {
-            // Cargar asistencias y observaciones en paralelo
             const [attendance, observations] = await Promise.all([
                 fetchAttendanceData(),
                 fetchObservationsData()
@@ -133,13 +154,21 @@ const AdminReports = () => {
         }
     };
 
+    // Función para obtener el nombre del registrador a partir del ID
+    const getRegistradorNombre = (registradoPor) => {
+        if (!registradoPor || registradoPor === '-') return '-';
+        if (registradoPor.length < 24 || !registradoPor.match(/^[0-9a-fA-F]{24}$/)) {
+            return registradoPor;
+        }
+        return usersMap[registradoPor] || registradoPor;
+    };
+
     // Función auxiliar para obtener información del estudiante de manera segura
     const getStudentInfo = (record) => {
         if (!record.studentId) {
             return { nombre: 'N/A', grado: 'N/A', _id: null };
         }
         
-        // Caso 1: Es un objeto con datos del estudiante (poblado)
         if (typeof record.studentId === 'object' && record.studentId !== null) {
             if (record.studentId.apellido1 || record.studentId.apellido) {
                 return {
@@ -148,7 +177,6 @@ const AdminReports = () => {
                     _id: record.studentId._id
                 };
             }
-            // Es un objeto pero solo tiene _id
             return {
                 nombre: 'Estudiante ID: ' + (record.studentId._id?.toString().slice(-6) || '?'),
                 grado: 'N/A',
@@ -156,7 +184,6 @@ const AdminReports = () => {
             };
         }
         
-        // Caso 2: Es un string (ObjectId)
         if (typeof record.studentId === 'string') {
             return {
                 nombre: 'Estudiante ID: ' + record.studentId.slice(-6),
@@ -172,7 +199,6 @@ const AdminReports = () => {
         console.log('🔍 Generando reporte - Tipo:', reportType);
         console.log('📅 Rango de fechas:', startDate, 'a', endDate);
         
-        // Mapeo de motivos
         const motivoMap = {
             'enfermedad': 'Enfermedad',
             'permiso': 'Permiso',
@@ -191,7 +217,6 @@ const AdminReports = () => {
             
             console.log('📊 Total asistencias en BD:', filtered.length);
             
-            // Filtrar por curso si es necesario
             if (selectedCourse !== 'todos') {
                 filtered = filtered.filter(record => {
                     const studentInfo = getStudentInfo(record);
@@ -209,7 +234,7 @@ const AdminReports = () => {
                     estado: estadoMap[record.estado] || record.estado || 'Sin registrar',
                     motivo: motivoMap[record.motivo] || record.motivo || '-',
                     observaciones: record.observacion || '-',
-                    registradoPor: record.registradoPor || '-'
+                    registradoPor: getRegistradorNombre(record.registradoPor)  // 🔥 NUEVO: muestra el nombre del registrador
                 };
             });
             
@@ -221,7 +246,6 @@ const AdminReports = () => {
             
             console.log('📝 Total observaciones en BD:', filtered.length);
             
-            // Filtrar por curso si es necesario
             if (selectedCourse !== 'todos') {
                 filtered = filtered.filter(record => {
                     const studentInfo = getStudentInfo(record);
@@ -247,7 +271,6 @@ const AdminReports = () => {
             return mappedData;
         }
         else {
-            // Reporte general
             const attendanceMapped = allAttendance.map(record => {
                 const studentInfo = getStudentInfo(record);
                 return {
@@ -256,7 +279,8 @@ const AdminReports = () => {
                     estudiante: studentInfo.nombre,
                     grado: studentInfo.grado,
                     detalle: estadoMap[record.estado] || record.estado || 'Sin registrar',
-                    observaciones: record.observacion || '-'
+                    observaciones: record.observacion || '-',
+                    registradoPor: getRegistradorNombre(record.registradoPor)
                 };
             });
             
@@ -275,7 +299,6 @@ const AdminReports = () => {
             const combined = [...attendanceMapped, ...observationsMapped];
             combined.sort((a, b) => new Date(b.fecha) - new Date(a.fecha));
             
-            // Filtrar por curso si es necesario
             let filtered = combined;
             if (selectedCourse !== 'todos') {
                 filtered = filtered.filter(item => item.grado === selectedCourse);
@@ -464,10 +487,10 @@ const AdminReports = () => {
                                     <tr style={styles.tableHeader}>
                                         {reportData.length > 0 && Object.keys(reportData[0]).map(key => (
                                             <th key={key} style={styles.th}>
-                                                {key.charAt(0).toUpperCase() + key.slice(1)}
+                                                {key === 'registradoPor' ? 'Registrado por' : key.charAt(0).toUpperCase() + key.slice(1)}
                                             </th>
                                         ))}
-                                    </tr>
+                                     </tr>
                                 </thead>
                                 <tbody>
                                     {reportData.slice(0, 10).map((item, idx) => (

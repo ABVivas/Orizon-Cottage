@@ -1,5 +1,4 @@
 // Frontend/src/Pages/DirectivoUsuarios.jsx
-// Frontend/src/Pages/DirectivoUsuarios.jsx
 import { useState, useEffect } from 'react';
 
 const DirectivoUsuarios = () => {
@@ -29,13 +28,13 @@ const DirectivoUsuarios = () => {
     // Estados para modal de edición
     const [showModal, setShowModal] = useState(false);
     const [selectedItem, setSelectedItem] = useState(null);
-    const [modalType, setModalType] = useState(''); // 'user' o 'student'
+    const [modalType, setModalType] = useState(''); // 'user', 'student'
     const [editForm, setEditForm] = useState({
         nombre: '',
-        email: '',
         telefono: '',
         activo: true,
-        cursosAsignados: ''
+        cursosAsignados: '',
+        estudiantesAsociados: [] // Para acudientes
     });
     const [studentEditForm, setStudentEditForm] = useState({
         apellido1: '',
@@ -47,13 +46,37 @@ const DirectivoUsuarios = () => {
         vereda: '',
         parentesco: 'PADRE'
     });
+    
+    // Estado para nuevo usuario/estudiante (unificado)
+    const [newPersonForm, setNewPersonForm] = useState({
+        tipo: 'acudiente', // 'acudiente', 'docente', 'directivo', 'estudiante'
+        numeroIdentificacion: '',
+        nombre: '',
+        telefono: '',
+        password: '',
+        cursosAsignados: '',
+        // Para estudiantes
+        id_estudiante: '',
+        grado_especifico: '0°',
+        nombre_acudiente: '',
+        cedula_padre: '',
+        vereda: 'LA CABAÑA',
+        parentesco: 'PADRE'
+    });
+    
+    // Lista de estudiantes disponibles para asociar a acudientes
+    const [availableStudents, setAvailableStudents] = useState([]);
+    const [selectedStudentsForAcudiente, setSelectedStudentsForAcudiente] = useState([]);
+    
     const [saving, setSaving] = useState(false);
+    const [showNewPersonModal, setShowNewPersonModal] = useState(false);
 
     const grados = ['todos', '0°', '1°', '2°', '3°', '4°', '5°', '6°', '7°', '8°', '9°', '10°', '11°'];
     const parentescoOptions = ['PADRE', 'MADRE', 'ABUELO', 'TIO', 'OTRO'];
 
     useEffect(() => {
         fetchAllData();
+        fetchAvailableStudents();
     }, []);
 
     useEffect(() => {
@@ -87,6 +110,21 @@ const DirectivoUsuarios = () => {
             setError(error.message);
         } finally {
             setLoading(false);
+        }
+    };
+
+    const fetchAvailableStudents = async () => {
+        try {
+            const token = localStorage.getItem('token');
+            const response = await fetch('http://localhost:5000/api/students', {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            const data = await response.json();
+            if (data.success) {
+                setAvailableStudents(data.data || []);
+            }
+        } catch (error) {
+            console.error('Error fetching students:', error);
         }
     };
 
@@ -158,6 +196,9 @@ const DirectivoUsuarios = () => {
         if (user.rol === 'admin') {
             return 'Administración del sistema';
         }
+        if (user.rol === 'estudiante') {
+            return 'Estudiante matriculado';
+        }
         return '-';
     };
 
@@ -166,11 +207,12 @@ const DirectivoUsuarios = () => {
         setSelectedItem(user);
         setEditForm({
             nombre: user.nombre || '',
-            email: user.email || '',
             telefono: user.telefono || '',
             activo: user.activo !== undefined ? user.activo : true,
-            cursosAsignados: user.cursosAsignados ? user.cursosAsignados.join(', ') : ''
+            cursosAsignados: user.cursosAsignados ? user.cursosAsignados.join(', ') : '',
+            estudiantesAsociados: user.estudiantesAsociados || []
         });
+        setSelectedStudentsForAcudiente(user.estudiantesAsociados?.map(s => s._id || s) || []);
         setShowModal(true);
     };
 
@@ -190,6 +232,142 @@ const DirectivoUsuarios = () => {
         setShowModal(true);
     };
 
+    const openNewPersonModal = () => {
+        setNewPersonForm({
+            tipo: 'acudiente',
+            numeroIdentificacion: '',
+            nombre: '',
+            telefono: '',
+            password: '',
+            cursosAsignados: '',
+            id_estudiante: '',
+            grado_especifico: '0°',
+            nombre_acudiente: '',
+            cedula_padre: '',
+            vereda: 'LA CABAÑA',
+            parentesco: 'PADRE'
+        });
+        setSelectedStudentsForAcudiente([]);
+        setShowNewPersonModal(true);
+    };
+
+    const handleCreatePerson = async () => {
+        // Validaciones básicas
+        if (!newPersonForm.nombre) {
+            alert('❌ El nombre es obligatorio');
+            return;
+        }
+        
+        setSaving(true);
+        try {
+            const token = localStorage.getItem('token');
+            
+            // Si es estudiante, crear en la colección students
+            if (newPersonForm.tipo === 'estudiante') {
+                if (!newPersonForm.id_estudiante) {
+                    alert('❌ El ID del estudiante es obligatorio');
+                    setSaving(false);
+                    return;
+                }
+                
+                const studentData = {
+                    id_estudiante: newPersonForm.id_estudiante,
+                    apellido1: newPersonForm.nombre,
+                    grado_especifico: newPersonForm.grado_especifico,
+                    nombre_acudiente: newPersonForm.nombre_acudiente,
+                    cedula_padre: newPersonForm.cedula_padre,
+                    telefono: newPersonForm.telefono,
+                    vereda: newPersonForm.vereda,
+                    parentesco: newPersonForm.parentesco,
+                    grado: newPersonForm.grado_especifico === '0°' ? 'preescolar' : 
+                            ['1°','2°','3°','4°','5°'].includes(newPersonForm.grado_especifico) ? 'primaria' : 'secundaria'
+                };
+                
+                console.log('📝 Enviando datos estudiante:', studentData);
+                
+                const response = await fetch('http://localhost:5000/api/students', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`
+                    },
+                    body: JSON.stringify(studentData)
+                });
+                
+                console.log('📡 Status response:', response.status);
+                
+                // Verificar si la respuesta es JSON
+                const text = await response.text();
+                console.log('📡 Respuesta texto:', text);
+                
+                let data;
+                try {
+                    data = JSON.parse(text);
+                } catch (e) {
+                    console.error('Error parsing JSON:', e);
+                    throw new Error('La respuesta del servidor no es JSON válido. Verifica que el endpoint /api/students existe.');
+                }
+                
+                if (response.ok && data.success) {
+                    alert(`✅ Estudiante creado exitosamente\n\nID: ${newPersonForm.id_estudiante}\nNombre: ${newPersonForm.nombre}`);
+                    setShowNewPersonModal(false);
+                    fetchAllData();
+                    fetchAvailableStudents();
+                } else {
+                    alert('❌ Error: ' + (data.message || 'No se pudo crear el estudiante'));
+                }
+            } else {
+                // Crear usuario (acudiente, docente, directivo)
+                if (!newPersonForm.numeroIdentificacion) {
+                    alert('❌ El número de identificación es obligatorio');
+                    setSaving(false);
+                    return;
+                }
+                
+                // Verificar si el usuario ya existe
+                const checkUser = users.find(u => u.numeroIdentificacion === newPersonForm.numeroIdentificacion);
+                if (checkUser) {
+                    alert('❌ Ya existe un usuario con este número de identificación');
+                    setSaving(false);
+                    return;
+                }
+                
+                const userData = {
+                    numeroIdentificacion: newPersonForm.numeroIdentificacion,
+                    nombre: newPersonForm.nombre,
+                    telefono: newPersonForm.telefono || '',
+                    rol: newPersonForm.tipo,
+                    password: newPersonForm.password || '123456',
+                    cursosAsignados: newPersonForm.cursosAsignados ? newPersonForm.cursosAsignados.split(',').map(c => c.trim()) : [],
+                    estudiantesAsociados: selectedStudentsForAcudiente // Para acudientes
+                };
+                
+                const response = await fetch('http://localhost:5000/api/auth/register', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`
+                    },
+                    body: JSON.stringify(userData)
+                });
+                
+                const data = await response.json();
+                if (data.success) {
+                    alert(`✅ ${newPersonForm.tipo === 'docente' ? 'Docente' : newPersonForm.tipo === 'directivo' ? 'Directivo' : 'Acudiente'} creado exitosamente\n\nUsuario: ${newPersonForm.numeroIdentificacion}\nContraseña: ${newPersonForm.password || '123456'}`);
+                    setShowNewPersonModal(false);
+                    fetchAllData();
+                } else {
+                    alert('❌ Error: ' + (data.message || 'No se pudo crear el usuario'));
+                }
+            }
+        } catch (error) {
+            console.error('Error detallado:', error);
+            alert('❌ Error de conexión: ' + error.message);
+        } finally {
+            setSaving(false);
+        }
+    };
+
     const handleSaveUser = async () => {
         if (!selectedItem) return;
         
@@ -199,13 +377,16 @@ const DirectivoUsuarios = () => {
             
             const updateData = {
                 nombre: editForm.nombre,
-                email: editForm.email,
                 telefono: editForm.telefono,
                 activo: editForm.activo
             };
             
             if (selectedItem.rol === 'docente' && editForm.cursosAsignados) {
                 updateData.cursosAsignados = editForm.cursosAsignados.split(',').map(c => c.trim());
+            }
+            
+            if (selectedItem.rol === 'acudiente') {
+                updateData.estudiantesAsociados = selectedStudentsForAcudiente;
             }
             
             const response = await fetch(`http://localhost:5000/api/users/${selectedItem._id}`, {
@@ -338,6 +519,7 @@ const DirectivoUsuarios = () => {
             case 'directivo': return '#f39c12';
             case 'docente': return '#27ae60';
             case 'acudiente': return '#3498db';
+            case 'estudiante': return '#9b59b6';
             default: return '#95a5a6';
         }
     };
@@ -348,6 +530,7 @@ const DirectivoUsuarios = () => {
             case 'directivo': return 'Directivo';
             case 'docente': return 'Docente';
             case 'acudiente': return 'Acudiente';
+            case 'estudiante': return 'Estudiante';
             default: return rol;
         }
     };
@@ -367,6 +550,17 @@ const DirectivoUsuarios = () => {
     const currentData = activeTab === 'users' ? filteredUsers : filteredStudents;
     const totalPages = Math.ceil(currentData.length / itemsPerPage);
     const paginatedData = currentData.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
+
+    // Función para manejar selección de estudiantes para acudiente
+    const toggleStudentSelection = (studentId) => {
+        setSelectedStudentsForAcudiente(prev => {
+            if (prev.includes(studentId)) {
+                return prev.filter(id => id !== studentId);
+            } else {
+                return [...prev, studentId];
+            }
+        });
+    };
 
     if (loading) {
         return (
@@ -388,8 +582,15 @@ const DirectivoUsuarios = () => {
 
     return (
         <div style={styles.container}>
-            <h2 style={styles.pageTitle}>Gestión de Usuarios</h2>
-            <p style={styles.pageSubtitle}>Administre usuarios, roles y estudiantes del sistema</p>
+            <div style={styles.headerSection}>
+                <div>
+                    <h2 style={styles.pageTitle}>Gestión de Usuarios</h2>
+                    <p style={styles.pageSubtitle}>Administre usuarios, roles y estudiantes del sistema</p>
+                </div>
+                <button style={styles.addButton} onClick={openNewPersonModal}>
+                    + Agregar Persona
+                </button>
+            </div>
             
             {/* Tabs */}
             <div style={styles.tabsContainer}>
@@ -423,6 +624,7 @@ const DirectivoUsuarios = () => {
                                 <option value="directivo">Directivos</option>
                                 <option value="docente">Docentes</option>
                                 <option value="acudiente">Acudientes</option>
+                                <option value="estudiante">Estudiantes</option>
                             </select>
                         </div>
                         
@@ -499,7 +701,7 @@ const DirectivoUsuarios = () => {
                                     <th style={styles.th}>Asignación</th>
                                     <th style={styles.th}>Estado</th>
                                     <th style={styles.th}>Acciones</th>
-                                   </tr>
+                                  </tr>
                             </thead>
                             <tbody>
                                 {paginatedData.map(user => (
@@ -507,7 +709,7 @@ const DirectivoUsuarios = () => {
                                         <td style={styles.td}>
                                             <strong>{user.nombre}</strong>
                                             <br />
-                                            <small style={styles.emailText}>{user.email || ''}</small>
+                                            <small style={styles.emailText}>{user.telefono || ''}</small>
                                         </td>
                                         <td style={styles.td}>{user.numeroIdentificacion}</td>
                                         <td style={styles.td}>
@@ -576,7 +778,7 @@ const DirectivoUsuarios = () => {
                                     <th style={styles.th}>Teléfono</th>
                                     <th style={styles.th}>Vereda</th>
                                     <th style={styles.th}>Acciones</th>
-                                </tr>
+                                  </tr>
                             </thead>
                             <tbody>
                                 {paginatedData.map(student => (
@@ -667,17 +869,6 @@ const DirectivoUsuarios = () => {
                                     </div>
                                     
                                     <div style={styles.formGroup}>
-                                        <label style={styles.modalLabel}>Email</label>
-                                        <input
-                                            type="email"
-                                            value={editForm.email}
-                                            onChange={(e) => setEditForm({...editForm, email: e.target.value})}
-                                            style={styles.input}
-                                            placeholder="Opcional"
-                                        />
-                                    </div>
-                                    
-                                    <div style={styles.formGroup}>
                                         <label style={styles.modalLabel}>Teléfono</label>
                                         <input
                                             type="text"
@@ -699,6 +890,29 @@ const DirectivoUsuarios = () => {
                                                 placeholder="Ej: 6°, 7°, 8°"
                                             />
                                             <small style={styles.helpText}>Separe los cursos con comas</small>
+                                        </div>
+                                    )}
+                                    
+                                    {selectedItem.rol === 'acudiente' && (
+                                        <div style={styles.formGroup}>
+                                            <label style={styles.modalLabel}>Estudiantes Asociados</label>
+                                            <div style={styles.studentsListContainer}>
+                                                {availableStudents.length === 0 ? (
+                                                    <p style={styles.noStudentsText}>No hay estudiantes disponibles</p>
+                                                ) : (
+                                                    availableStudents.map(student => (
+                                                        <label key={student._id} style={styles.checkboxLabel}>
+                                                            <input
+                                                                type="checkbox"
+                                                                checked={selectedStudentsForAcudiente.includes(student._id)}
+                                                                onChange={() => toggleStudentSelection(student._id)}
+                                                            />
+                                                            {student.apellido1 || student.apellido} - {student.grado_especifico} ({student.id_estudiante})
+                                                        </label>
+                                                    ))
+                                                )}
+                                            </div>
+                                            <small style={styles.helpText}>Seleccione los estudiantes asociados a este acudiente</small>
                                         </div>
                                     )}
                                     
@@ -815,6 +1029,209 @@ const DirectivoUsuarios = () => {
                     </div>
                 </div>
             )}
+            
+            {/* Modal para agregar nueva persona */}
+            {showNewPersonModal && (
+                <div style={styles.modalOverlay} onClick={() => setShowNewPersonModal(false)}>
+                    <div style={{...styles.modal, maxWidth: '650px'}} onClick={(e) => e.stopPropagation()}>
+                        <div style={styles.modalHeader}>
+                            <h3 style={styles.modalTitle}>Agregar Persona</h3>
+                            <button style={styles.modalClose} onClick={() => setShowNewPersonModal(false)}>×</button>
+                        </div>
+                        
+                        <div style={styles.modalContent}>
+                            <div style={styles.formGroup}>
+                                <label style={styles.modalLabel}>Tipo de Persona *</label>
+                                <select
+                                    value={newPersonForm.tipo}
+                                    onChange={(e) => {
+                                        setNewPersonForm({...newPersonForm, tipo: e.target.value});
+                                        setSelectedStudentsForAcudiente([]);
+                                    }}
+                                    style={styles.select}
+                                >
+                                    <option value="acudiente">Acudiente</option>
+                                    <option value="docente">Docente</option>
+                                    <option value="directivo">Directivo</option>
+                                    <option value="estudiante">Estudiante</option>
+                                </select>
+                            </div>
+                            
+                            {newPersonForm.tipo !== 'estudiante' && (
+                                <>
+                                    <div style={styles.formGroup}>
+                                        <label style={styles.modalLabel}>Número de Identificación *</label>
+                                        <input
+                                            type="text"
+                                            value={newPersonForm.numeroIdentificacion}
+                                            onChange={(e) => setNewPersonForm({...newPersonForm, numeroIdentificacion: e.target.value})}
+                                            style={styles.input}
+                                            placeholder="Ej: 123456789"
+                                        />
+                                    </div>
+                                </>
+                            )}
+                            
+                            {newPersonForm.tipo === 'estudiante' && (
+                                <div style={styles.formGroup}>
+                                    <label style={styles.modalLabel}>ID Estudiante *</label>
+                                    <input
+                                        type="text"
+                                        value={newPersonForm.id_estudiante}
+                                        onChange={(e) => setNewPersonForm({...newPersonForm, id_estudiante: e.target.value})}
+                                        style={styles.input}
+                                        placeholder="Ej: 1063819482"
+                                    />
+                                </div>
+                            )}
+                            
+                            <div style={styles.formGroup}>
+                                <label style={styles.modalLabel}>Nombre Completo *</label>
+                                <input
+                                    type="text"
+                                    value={newPersonForm.nombre}
+                                    onChange={(e) => setNewPersonForm({...newPersonForm, nombre: e.target.value})}
+                                    style={styles.input}
+                                    placeholder="Ej: Juan Pérez"
+                                />
+                            </div>
+                            
+                            {newPersonForm.tipo === 'docente' && (
+                                <div style={styles.formGroup}>
+                                    <label style={styles.modalLabel}>Cursos Asignados (separados por coma)</label>
+                                    <input
+                                        type="text"
+                                        value={newPersonForm.cursosAsignados}
+                                        onChange={(e) => setNewPersonForm({...newPersonForm, cursosAsignados: e.target.value})}
+                                        style={styles.input}
+                                        placeholder="Ej: 6°, 7°, 8°"
+                                    />
+                                    <small style={styles.helpText}>Separe los cursos con comas</small>
+                                </div>
+                            )}
+                            
+                            {newPersonForm.tipo === 'acudiente' && (
+                                <div style={styles.formGroup}>
+                                    <label style={styles.modalLabel}>Estudiantes Asociados</label>
+                                    <div style={styles.studentsListContainer}>
+                                        {availableStudents.length === 0 ? (
+                                            <p style={styles.noStudentsText}>No hay estudiantes disponibles. Primero agregue estudiantes.</p>
+                                        ) : (
+                                            availableStudents.map(student => (
+                                                <label key={student._id} style={styles.checkboxLabel}>
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={selectedStudentsForAcudiente.includes(student._id)}
+                                                        onChange={() => toggleStudentSelection(student._id)}
+                                                    />
+                                                    {student.apellido1 || student.apellido} - {student.grado_especifico} ({student.id_estudiante})
+                                                </label>
+                                            ))
+                                        )}
+                                    </div>
+                                    <small style={styles.helpText}>Seleccione los estudiantes asociados a este acudiente</small>
+                                </div>
+                            )}
+                            
+                            {newPersonForm.tipo === 'estudiante' && (
+                                <>
+                                    <div style={styles.formGroup}>
+                                        <label style={styles.modalLabel}>Grado *</label>
+                                        <select
+                                            value={newPersonForm.grado_especifico}
+                                            onChange={(e) => setNewPersonForm({...newPersonForm, grado_especifico: e.target.value})}
+                                            style={styles.select}
+                                        >
+                                            {grados.filter(g => g !== 'todos').map(g => (
+                                                <option key={g} value={g}>{g}</option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                    
+                                    <div style={styles.formGroup}>
+                                        <label style={styles.modalLabel}>Nombre Acudiente</label>
+                                        <input
+                                            type="text"
+                                            value={newPersonForm.nombre_acudiente}
+                                            onChange={(e) => setNewPersonForm({...newPersonForm, nombre_acudiente: e.target.value})}
+                                            style={styles.input}
+                                            placeholder="Nombre del acudiente"
+                                        />
+                                    </div>
+                                    
+                                    <div style={styles.formGroup}>
+                                        <label style={styles.modalLabel}>Cédula Acudiente</label>
+                                        <input
+                                            type="text"
+                                            value={newPersonForm.cedula_padre}
+                                            onChange={(e) => setNewPersonForm({...newPersonForm, cedula_padre: e.target.value})}
+                                            style={styles.input}
+                                            placeholder="Cédula del acudiente"
+                                        />
+                                    </div>
+                                    
+                                    <div style={styles.formGroup}>
+                                        <label style={styles.modalLabel}>Parentesco</label>
+                                        <select
+                                            value={newPersonForm.parentesco}
+                                            onChange={(e) => setNewPersonForm({...newPersonForm, parentesco: e.target.value})}
+                                            style={styles.select}
+                                        >
+                                            {parentescoOptions.map(p => (
+                                                <option key={p} value={p}>{p}</option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                    
+                                    <div style={styles.formGroup}>
+                                        <label style={styles.modalLabel}>Vereda</label>
+                                        <input
+                                            type="text"
+                                            value={newPersonForm.vereda}
+                                            onChange={(e) => setNewPersonForm({...newPersonForm, vereda: e.target.value})}
+                                            style={styles.input}
+                                            placeholder="Ej: LA CABAÑA"
+                                        />
+                                    </div>
+                                </>
+                            )}
+                            
+                            <div style={styles.formGroup}>
+                                <label style={styles.modalLabel}>Teléfono (opcional)</label>
+                                <input
+                                    type="text"
+                                    value={newPersonForm.telefono}
+                                    onChange={(e) => setNewPersonForm({...newPersonForm, telefono: e.target.value})}
+                                    style={styles.input}
+                                    placeholder="Ej: 3001234567"
+                                />
+                            </div>
+                            
+                            {newPersonForm.tipo !== 'estudiante' && (
+                                <div style={styles.formGroup}>
+                                    <label style={styles.modalLabel}>Contraseña (dejar vacío para usar 123456)</label>
+                                    <input
+                                        type="text"
+                                        value={newPersonForm.password}
+                                        onChange={(e) => setNewPersonForm({...newPersonForm, password: e.target.value})}
+                                        style={styles.input}
+                                        placeholder="Contraseña temporal"
+                                    />
+                                </div>
+                            )}
+                        </div>
+                        
+                        <div style={styles.modalFooter}>
+                            <button style={styles.cancelButton} onClick={() => setShowNewPersonModal(false)}>
+                                Cancelar
+                            </button>
+                            <button style={styles.saveButton} onClick={handleCreatePerson} disabled={saving}>
+                                {saving ? 'Creando...' : 'Crear Persona'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };
@@ -825,6 +1242,14 @@ const styles = {
         maxWidth: '1200px',
         margin: '0 auto'
     },
+    headerSection: {
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: '24px',
+        flexWrap: 'wrap',
+        gap: '16px'
+    },
     pageTitle: {
         margin: '0 0 5px 0',
         fontSize: '24px',
@@ -832,9 +1257,23 @@ const styles = {
         color: '#2c3e50'
     },
     pageSubtitle: {
-        margin: '0 0 24px 0',
+        margin: '0',
         fontSize: '14px',
         color: '#7f8c8d'
+    },
+    addButton: {
+        padding: '10px 20px',
+        backgroundColor: '#27ae60',
+        color: 'white',
+        border: 'none',
+        borderRadius: '8px',
+        cursor: 'pointer',
+        fontSize: '14px',
+        fontWeight: '500',
+        display: 'flex',
+        alignItems: 'center',
+        gap: '5px',
+        transition: 'all 0.2s'
     },
     loadingContainer: {
         display: 'flex',
@@ -1119,6 +1558,28 @@ const styles = {
         borderRadius: '6px',
         fontSize: '14px',
         backgroundColor: 'white'
+    },
+    studentsListContainer: {
+        border: '1px solid #dcdfe6',
+        borderRadius: '6px',
+        padding: '10px',
+        maxHeight: '200px',
+        overflowY: 'auto',
+        backgroundColor: '#fafafa'
+    },
+    checkboxLabel: {
+        display: 'flex',
+        alignItems: 'center',
+        gap: '8px',
+        padding: '6px 0',
+        cursor: 'pointer',
+        fontSize: '13px'
+    },
+    noStudentsText: {
+        textAlign: 'center',
+        color: '#95a5a6',
+        padding: '20px',
+        fontSize: '13px'
     },
     helpText: {
         fontSize: '11px',

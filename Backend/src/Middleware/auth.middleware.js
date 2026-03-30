@@ -99,6 +99,25 @@ export const isDirectivo = (req, res, next) => {
     next();
 };
 
+// NUEVO MIDDLEWARE: Para permitir tanto admin como directivo
+export const isDirectivoOrAdmin = (req, res, next) => {
+    if (!req.user) {
+        return res.status(401).json({
+            success: false,
+            message: 'Usuario no autenticado'
+        });
+    }
+
+    if (req.user.rol !== 'directivo' && req.user.rol !== 'admin') {
+        return res.status(403).json({
+            success: false,
+            message: 'Acceso denegado. Se requieren permisos de administrador o directivo.'
+        });
+    }
+
+    next();
+};
+
 // Middleware específico para admin
 export const isAdmin = (req, res, next) => {
     if (!req.user) {
