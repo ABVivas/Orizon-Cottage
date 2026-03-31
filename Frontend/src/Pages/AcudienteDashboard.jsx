@@ -1,7 +1,7 @@
 // Frontend/src/Pages/AcudienteDashboard.jsx
 import { useState, useEffect } from 'react';
 
-const AcudienteDashboard = ({ user }) => {
+const AcudienteDashboard = ({ user, setActiveSection }) => {
     const [hijo, setHijo] = useState(null);
     const [asistencias, setAsistencias] = useState([]);
     const [observaciones, setObservaciones] = useState([]);
@@ -28,10 +28,8 @@ const AcudienteDashboard = ({ user }) => {
             const data = await response.json();
 
             if (data.success && data.data && data.data.length > 0) {
-                // Tomamos el primer hijo de la lista
                 const primerHijo = data.data[0];
                 setHijo(primerHijo);
-                // Una vez que tenemos el hijo, cargamos su asistencia y observaciones
                 fetchAsistencias(primerHijo._id);
                 fetchObservaciones(primerHijo._id);
             } else {
@@ -48,38 +46,31 @@ const AcudienteDashboard = ({ user }) => {
     const fetchAsistencias = async (estudianteId) => {
         try {
             const token = localStorage.getItem('token');
-            // Traemos las asistencias de los últimos 30 días (como en tu imagen)
             const response = await fetch(
-                `http://localhost:5000/api/attendance/estudiante/${estudianteId}?limit=30`,
+                `http://localhost:5000/api/attendance/estudiante/${estudianteId}?limit=5`,
                 { headers: { 'Authorization': `Bearer ${token}` } }
             );
-
             if (!response.ok) throw new Error('Error al cargar asistencias');
             const data = await response.json();
-            // La respuesta del backend debería ser { success: true, data: [...] }
             setAsistencias(data.data || []);
         } catch (error) {
             console.error('❌ Error en fetchAsistencias:', error);
-            // No mostramos error grave, solo que no hay datos
         }
     };
 
     const fetchObservaciones = async (estudianteId) => {
         try {
             const token = localStorage.getItem('token');
-            // Traemos las observaciones de los últimos 30 días
             const response = await fetch(
-                `http://localhost:5000/api/observations/estudiante/${estudianteId}?limit=30`,
+                `http://localhost:5000/api/observations/estudiante/${estudianteId}?limit=2`,
                 { headers: { 'Authorization': `Bearer ${token}` } }
             );
-
             if (!response.ok) throw new Error('Error al cargar observaciones');
             const data = await response.json();
             setObservaciones(data.data || []);
         } catch (error) {
             console.error('❌ Error en fetchObservaciones:', error);
         } finally {
-            // Aseguramos que loading se desactive solo después de todos los fetch
             setLoading(false);
         }
     };
@@ -112,8 +103,39 @@ const AcudienteDashboard = ({ user }) => {
         return '';
     };
 
+    // Obtener nombre del docente que registró la asistencia
+    const getDocenteNombre = (item) => {
+        if (item.docenteId) {
+            if (typeof item.docenteId === 'object' && item.docenteId.nombre) {
+                return item.docenteId.nombre;
+            }
+            if (typeof item.docenteId === 'string') {
+                return item.docenteId;
+            }
+        }
+        return null;
+    };
+
+    // Obtener nombre del docente que registró la observación
+    const getDocenteObservacion = (obs) => {
+        if (obs.docenteId) {
+            if (typeof obs.docenteId === 'object' && obs.docenteId.nombre) {
+                return obs.docenteId.nombre;
+            }
+            if (typeof obs.docenteId === 'string') {
+                return obs.docenteId;
+            }
+        }
+        return null;
+    };
+
     if (loading) {
-        return <div style={styles.loadingContainer}><div style={styles.loadingSpinner}></div><p>Cargando información de tu hijo...</p></div>;
+        return (
+            <div style={styles.loadingContainer}>
+                <div style={styles.loadingSpinner}></div>
+                <p>Cargando información de tu hijo...</p>
+            </div>
+        );
     }
 
     if (error) {
@@ -142,60 +164,92 @@ const AcudienteDashboard = ({ user }) => {
             <h2 style={styles.pageTitle}>Panel Acudiente</h2>
             <p style={styles.pageSubtitle}>Consulte el progreso académico de sus hijos</p>
 
-            {/* Información del Hijo (en lugar del selector) */}
+            {/* Información del Hijo */}
             <div style={styles.hijoInfoCard}>
                 <span style={styles.hijoInfoLabel}>Estudiante</span>
                 <span style={styles.hijoInfoName}>{hijo.apellido1 || hijo.apellido} - {hijo.grado_especifico}</span>
             </div>
 
-            {/* Asistencia Semanal (últimos 5 registros como en tu imagen) */}
+            {/* Asistencia Semanal (últimos 5 registros) */}
             <div style={styles.sectionCard}>
-                <h3 style={styles.sectionTitle}>Asistencia Semanal</h3>
+                <div style={styles.sectionHeader}>
+                    <h3 style={styles.sectionTitle}>Asistencia Semanal</h3>
+                    <button
+                        style={styles.viewAllButton}
+                        onClick={() => setActiveSection && setActiveSection('asistencia')}
+                    >
+                        Ver todas →
+                    </button>
+                </div>
                 <div style={styles.asistenciaList}>
                     {asistencias.length === 0 ? (
                         <p style={styles.emptyMessage}>No hay registros de asistencia para este estudiante.</p>
                     ) : (
-                        asistencias.slice(0, 5).map((item, index) => (
-                            <div key={index} style={styles.asistenciaItem}>
-                                <div style={styles.asistenciaInfo}>
-                                    <span style={styles.asistenciaFecha}>{formatDate(item.fecha)}</span>
-                                    <span style={styles.asistenciaEstado}>
-                                        {getEstadoTexto(item.estado)}
-                                        {item.motivo && ` - ${getMotivoTexto(item)}`}
+                        asistencias.map((item, index) => {
+                            const docenteNombre = getDocenteNombre(item);
+                            return (
+                                <div key={index} style={styles.asistenciaItem}>
+                                    <div style={styles.asistenciaInfo}>
+                                        <span style={styles.asistenciaFecha}>{formatDate(item.fecha)}</span>
+                                        <span style={styles.asistenciaEstado}>
+                                            {getEstadoTexto(item.estado)}
+                                            {item.motivo && ` - ${getMotivoTexto(item)}`}
+                                        </span>
+                                        {docenteNombre && (
+                                            <span style={styles.asistenciaDocente}>
+                                                👨‍🏫 Registrado por: {docenteNombre}
+                                            </span>
+                                        )}
+                                    </div>
+                                    <span style={{
+                                        ...styles.estadoBadge,
+                                        backgroundColor: item.estado === 'presente' ? '#27ae60' :
+                                                          item.estado === 'tarde' ? '#f39c12' : '#e74c3c'
+                                    }}>
+                                        {item.estado === 'presente' ? 'Presente' :
+                                         item.estado === 'tarde' ? 'Tardanza' : 'Ausente'}
                                     </span>
                                 </div>
-                                <span style={{
-                                    ...styles.estadoBadge,
-                                    backgroundColor: item.estado === 'presente' ? '#27ae60' :
-                                                      item.estado === 'tarde' ? '#f39c12' : '#e74c3c'
-                                }}>
-                                    {item.estado === 'presente' ? 'Presente' :
-                                     item.estado === 'tarde' ? 'Tardanza' : 'Ausente'}
-                                </span>
-                            </div>
-                        ))
+                            );
+                        })
                     )}
                 </div>
             </div>
 
-            {/* Observaciones Recientes (últimos 2 registros como en tu imagen) */}
+            {/* Observaciones Recientes (últimos 2 registros) */}
             <div style={styles.sectionCard}>
-                <h3 style={styles.sectionTitle}>Observaciones Recientes</h3>
+                <div style={styles.sectionHeader}>
+                    <h3 style={styles.sectionTitle}>Observaciones Recientes</h3>
+                    <button
+                        style={styles.viewAllButton}
+                        onClick={() => setActiveSection && setActiveSection('observaciones')}
+                    >
+                        Ver todas →
+                    </button>
+                </div>
                 <div style={styles.observacionesList}>
                     {observaciones.length === 0 ? (
                         <p style={styles.emptyMessage}>No hay observaciones recientes para este estudiante.</p>
                     ) : (
-                        observaciones.slice(0, 2).map((obs, index) => (
-                            <div key={index} style={styles.observacionItem}>
-                                <div style={styles.observacionHeader}>
-                                    <span style={styles.observacionFecha}>{formatDate(obs.fecha)}</span>
-                                    <span style={styles.observacionTipo}>
-                                        {obs.tipo} - {obs.docenteId?.nombre || 'Docente'}
-                                    </span>
+                        observaciones.map((obs, index) => {
+                            const docenteNombre = getDocenteObservacion(obs);
+                            return (
+                                <div key={index} style={styles.observacionItem}>
+                                    <div style={styles.observacionHeader}>
+                                        <span style={styles.observacionFecha}>{formatDate(obs.fecha)}</span>
+                                        <span style={styles.observacionTipo}>
+                                            {obs.tipo} - {obs.nivel}
+                                        </span>
+                                    </div>
+                                    <p style={styles.observacionDesc}>{obs.descripcion}</p>
+                                    {docenteNombre && (
+                                        <span style={styles.observacionDocente}>
+                                            👨‍🏫 Registrado por: {docenteNombre}
+                                        </span>
+                                    )}
                                 </div>
-                                <p style={styles.observacionDesc}>{obs.descripcion}</p>
-                            </div>
-                        ))
+                            );
+                        })
                     )}
                 </div>
             </div>
@@ -203,9 +257,6 @@ const AcudienteDashboard = ({ user }) => {
     );
 };
 
-// ===========================================
-// ESTILOS (Casi idénticos a los que me pasaste en la imagen)
-// ===========================================
 const styles = {
     container: {
         padding: '24px',
@@ -253,13 +304,28 @@ const styles = {
         padding: '24px',
         marginBottom: '24px',
     },
+    sectionHeader: {
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: '16px',
+    },
     sectionTitle: {
-        margin: '0 0 20px 0',
+        margin: 0,
         fontSize: '18px',
         fontWeight: '600',
         color: '#2c3e50',
         borderBottom: '2px solid #27ae60',
-        paddingBottom: '12px',
+        paddingBottom: '8px',
+    },
+    viewAllButton: {
+        background: 'none',
+        border: 'none',
+        color: '#27ae60',
+        fontSize: '13px',
+        cursor: 'pointer',
+        padding: '4px 8px',
+        borderRadius: '4px',
     },
     asistenciaList: {
         display: 'flex',
@@ -288,6 +354,16 @@ const styles = {
     asistenciaEstado: {
         fontSize: '14px',
         color: '#4a5568',
+    },
+    asistenciaDocente: {
+        fontSize: '11px',
+        color: '#27ae60',
+        backgroundColor: '#e8f5e9',
+        padding: '2px 8px',
+        borderRadius: '12px',
+        display: 'inline-block',
+        width: 'fit-content',
+        marginTop: '4px'
     },
     estadoBadge: {
         padding: '6px 14px',
@@ -334,6 +410,16 @@ const styles = {
         fontSize: '14px',
         color: '#2d3748',
         lineHeight: '1.6',
+    },
+    observacionDocente: {
+        fontSize: '11px',
+        color: '#27ae60',
+        backgroundColor: '#e8f5e9',
+        padding: '2px 8px',
+        borderRadius: '12px',
+        display: 'inline-block',
+        width: 'fit-content',
+        marginTop: '10px'
     },
     emptyMessage: {
         textAlign: 'center',
@@ -385,7 +471,7 @@ const styles = {
     },
 };
 
-// Añadir la animación del spinner
+// Animación para el spinner
 const styleSheet = document.createElement("style");
 styleSheet.textContent = `
     @keyframes spin {

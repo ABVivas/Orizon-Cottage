@@ -68,6 +68,31 @@ const AcudienteObservaciones = ({ user }) => {
         }
     };
 
+    // Obtener nombre del docente que registró la observación
+    const getDocenteNombre = (obs) => {
+        if (obs.docenteId) {
+            if (typeof obs.docenteId === 'object' && obs.docenteId.nombre) {
+                return obs.docenteId.nombre;
+            }
+            if (typeof obs.docenteId === 'string') {
+                return obs.docenteId;
+            }
+        }
+        return 'No especificado';
+    };
+
+    const getDocumentUrl = (filename) => {
+        if (!filename) return null;
+        return `http://localhost:5000/api/download/${encodeURIComponent(filename)}`;
+    };
+
+    // Extraer nombre del archivo de la URL
+    const getDocumentFilename = (url) => {
+        if (!url) return null;
+        const parts = url.split('/');
+        return parts[parts.length - 1];
+    };
+
     const handleMarcarRevisado = (obsId) => {
         alert('Función: Marcar como Revisado (próximamente)');
     };
@@ -108,7 +133,7 @@ const AcudienteObservaciones = ({ user }) => {
             <h2 style={styles.pageTitle}>Observaciones y Planes de Mejora</h2>
             <p style={styles.pageSubtitle}>Revise las observaciones y seguimiento de sus hijos</p>
 
-            {/* Estudiante - IGUAL QUE EN LA IMAGEN */}
+            {/* Estudiante */}
             <div style={styles.estudianteContainer}>
                 <strong>Estudiante</strong>
                 <div style={styles.estudianteNombre}>
@@ -123,11 +148,14 @@ const AcudienteObservaciones = ({ user }) => {
                 ) : (
                     observaciones.map((obs) => {
                         const nivelInfo = getNivelInfo(obs.nivel);
+                        const docenteNombre = getDocenteNombre(obs);
+                        const documentoFilename = obs.documentoPlan?.url ? getDocumentFilename(obs.documentoPlan.url) : null;
+                        
                         return (
                             <div key={obs._id} style={styles.obsCard}>
                                 <div style={styles.obsHeader}>
                                     <span style={styles.obsTitulo}>
-                                        Observación {obs.tipo} 
+                                        Observación {obs.tipo}
                                         <span style={{
                                             ...styles.nivelBadge,
                                             backgroundColor: nivelInfo.color
@@ -140,28 +168,28 @@ const AcudienteObservaciones = ({ user }) => {
 
                                 <div style={styles.obsBody}>
                                     <p><strong>Descripción:</strong> {obs.descripcion}</p>
-                                    <p><strong>Docente:</strong> {obs.docenteId?.nombre || 'No especificado'}</p>
+                                    <p><strong>Docente que registró:</strong> 
+                                        <span style={styles.docenteName}> {docenteNombre}</span>
+                                    </p>
                                     
                                     {obs.planMejora && (
-                                        <>
-                                            <p><strong>Plan de Mejora:</strong> {obs.planMejora}</p>
-                                        </>
+                                        <p><strong>Plan de Mejora:</strong> {obs.planMejora}</p>
                                     )}
 
-                                    {/* NUEVO: Mostrar documento si existe */}
-                                    {obs.documentoPlan && (
+                                    {/* Documento adjunto */}
+                                    {documentoFilename && (
                                         <div style={styles.documentoSection}>
                                             <p><strong>Documento del Plan de Mejora:</strong></p>
                                             <a 
-                                                href={`http://localhost:5000${obs.documentoPlan.url}`} 
+                                                href={getDocumentUrl(documentoFilename)} 
                                                 style={styles.documentoLink}
                                                 target="_blank"
                                                 rel="noopener noreferrer"
                                             >
-                                                📎 {obs.documentoPlan.nombre}
+                                                📎 {obs.documentoPlan?.nombre || 'Ver documento'}
                                             </a>
                                             <p style={styles.documentoNota}>
-                                                Subido el {new Date(obs.documentoPlan.fechaSubida).toLocaleDateString()}
+                                                Subido el {obs.documentoPlan?.fechaSubida ? new Date(obs.documentoPlan.fechaSubida).toLocaleDateString() : ''}
                                             </p>
                                         </div>
                                     )}
@@ -261,6 +289,15 @@ const styles = {
     },
     obsBody: {
         padding: '20px'
+    },
+    docenteName: {
+        fontWeight: '500',
+        color: '#27ae60',
+        backgroundColor: '#e8f5e9',
+        padding: '2px 8px',
+        borderRadius: '12px',
+        marginLeft: '8px',
+        display: 'inline-block'
     },
     documentoSection: {
         marginTop: '16px',

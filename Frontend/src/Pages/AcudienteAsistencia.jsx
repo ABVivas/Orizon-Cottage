@@ -59,12 +59,10 @@ const AcudienteAsistencia = ({ user }) => {
         return date.toLocaleDateString('es-ES', { year: 'numeric', month: '2-digit', day: '2-digit' });
     };
 
-    // 🔥 CORREGIDO: Mostrar el motivo real
     const getEstadoTexto = (item) => {
         if (item.estado === 'presente') return 'Llegó puntual';
         if (item.estado === 'tarde') return 'Llegó 15 min tarde';
         if (item.estado === 'ausente') {
-            // Mostrar el motivo real como aparece en la BD
             const motivos = {
                 'enfermedad': 'Enfermedad',
                 'permiso': 'Permiso',
@@ -76,6 +74,19 @@ const AcudienteAsistencia = ({ user }) => {
         return '';
     };
 
+    const getMotivoTexto = (item) => {
+        if (item.motivo) {
+            const motivos = {
+                'enfermedad': 'Enfermedad',
+                'permiso': 'Permiso',
+                'sin_justificar': 'Sin justificar',
+                'otro': 'Otro'
+            };
+            return motivos[item.motivo] || item.motivo;
+        }
+        return '';
+    };
+
     const getBadgeEstado = (estado) => {
         switch(estado) {
             case 'presente': return { bg: '#27ae60', text: 'Presente' };
@@ -83,6 +94,19 @@ const AcudienteAsistencia = ({ user }) => {
             case 'ausente': return { bg: '#e74c3c', text: 'Ausente' };
             default: return { bg: '#95a5a6', text: 'Sin registrar' };
         }
+    };
+
+    // Obtener nombre del docente que registró la asistencia
+    const getDocenteNombre = (item) => {
+        if (item.docenteId) {
+            if (typeof item.docenteId === 'object' && item.docenteId.nombre) {
+                return item.docenteId.nombre;
+            }
+            if (typeof item.docenteId === 'string') {
+                return item.docenteId;
+            }
+        }
+        return null;
     };
 
     if (loading) return <div style={styles.loading}>Cargando...</div>;
@@ -134,13 +158,22 @@ const AcudienteAsistencia = ({ user }) => {
                     ) : (
                         asistencias.map((item, index) => {
                             const badge = getBadgeEstado(item.estado);
+                            const motivoTexto = getMotivoTexto(item);
+                            const docenteNombre = getDocenteNombre(item);
+                            
                             return (
                                 <div key={index} style={styles.asistenciaItem}>
                                     <div style={styles.asistenciaInfo}>
                                         <span style={styles.asistenciaFecha}>{formatDate(item.fecha)}</span>
                                         <span style={styles.asistenciaEstado}>
                                             {getEstadoTexto(item)}
+                                            {motivoTexto && ` - ${motivoTexto}`}
                                         </span>
+                                        {docenteNombre && (
+                                            <span style={styles.asistenciaDocente}>
+                                                👨‍🏫 Registrado por: {docenteNombre}
+                                            </span>
+                                        )}
                                     </div>
                                     <span style={{
                                         ...styles.estadoBadge,
@@ -212,6 +245,16 @@ const styles = {
     asistenciaEstado: {
         fontSize: '13px',
         color: '#718096'
+    },
+    asistenciaDocente: {
+        fontSize: '11px',
+        color: '#27ae60',
+        backgroundColor: '#e8f5e9',
+        padding: '2px 8px',
+        borderRadius: '12px',
+        display: 'inline-block',
+        width: 'fit-content',
+        marginTop: '4px'
     },
     estadoBadge: {
         padding: '4px 12px',
