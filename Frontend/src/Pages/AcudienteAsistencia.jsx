@@ -114,8 +114,8 @@ const AcudienteAsistencia = ({ user }) => {
     if (error) {
         return (
             <div style={styles.container}>
-                <h2 style={styles.pageTitle}>Consulta de Asistencia</h2>
-                <p style={styles.pageSubtitle}>Consulte el registro de asistencia de sus hijos</p>
+                <h2 style={styles.pageTitle}>Consulta de Inasistencias</h2>
+                <p style={styles.pageSubtitle}>Consulte el registro de inasistencias de sus hijos</p>
                 <div style={styles.errorBox}>
                     <p>{error}</p>
                     <button onClick={fetchHijo} style={styles.retryButton}>Reintentar</button>
@@ -127,8 +127,8 @@ const AcudienteAsistencia = ({ user }) => {
     if (!hijo) {
         return (
             <div style={styles.container}>
-                <h2 style={styles.pageTitle}>Consulta de Asistencia</h2>
-                <p style={styles.pageSubtitle}>Consulte el registro de asistencia de sus hijos</p>
+                <h2 style={styles.pageTitle}>Consulta de Inasistencias</h2>
+                <p style={styles.pageSubtitle}>Consulte el registro de inasistencias de sus hijos</p>
                 <div style={styles.emptyState}>
                     <p>No hay información disponible</p>
                 </div>
@@ -138,8 +138,8 @@ const AcudienteAsistencia = ({ user }) => {
 
     return (
         <div style={styles.container}>
-            <h2 style={styles.pageTitle}>Consulta de Asistencia</h2>
-            <p style={styles.pageSubtitle}>Consulte el registro de asistencia de sus hijos</p>
+            <h2 style={styles.pageTitle}>Consulta de Inasistencias</h2>
+            <p style={styles.pageSubtitle}>Consulte el registro de inasistencias de sus hijos</p>
 
             {/* Estudiante */}
             <div style={styles.estudianteContainer}>
@@ -149,12 +149,12 @@ const AcudienteAsistencia = ({ user }) => {
                 </div>
             </div>
 
-            {/* Registro de Asistencia */}
+            {/* Registro de Inasistencias */}
             <div style={styles.section}>
-                <h3 style={styles.sectionTitle}>Registro de Asistencia - Últimos 30 días</h3>
+                <h3 style={styles.sectionTitle}>Registro de Inasistencias - Últimos 30 días</h3>
                 <div>
                     {asistencias.length === 0 ? (
-                        <p style={styles.emptyMessage}>No hay registros de asistencia</p>
+                        <p style={styles.emptyMessage}>No hay registros de inasistencias</p>
                     ) : (
                         asistencias.map((item, index) => {
                             const badge = getBadgeEstado(item.estado);

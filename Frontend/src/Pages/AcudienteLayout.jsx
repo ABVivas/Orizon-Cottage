@@ -31,7 +31,7 @@ const AcudienteLayout = ({ user, onLogout, activeSection, setActiveSection, chil
             
             const allItems = [
                 { id: "dashboard", label: "Panel Acudiente", icon: "📊" },
-                { id: "asistencia", label: "Consulta de Asistencias", icon: "📋" },
+                { id: "asistencia", label: "Consulta de Inasistencias", icon: "📋" },
                 { id: "observaciones", label: "Observaciones y Planes", icon: "📝" },
                 { id: "mensajeria", label: "Mensajería", icon: "💬" }
             ];

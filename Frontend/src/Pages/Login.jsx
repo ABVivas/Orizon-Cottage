@@ -70,7 +70,7 @@ const Login = ({ onLogin }) => {
             <div style={styles.loginCard}>
                 <div style={styles.header}>
                     <div style={styles.logoContainer}>
-                        <img src="/images/logo-oorizon.png" alt="Orizon Cottage" style={styles.logo} />
+                        <img src="/images/logo-orizon.jpeg" alt="Orizon Cottage" style={styles.logo} />
                     </div>
                     <div style={styles.titleWrapper}>
                         <h1 style={styles.logoTitle}>ORIZON COTTAGE</h1>
